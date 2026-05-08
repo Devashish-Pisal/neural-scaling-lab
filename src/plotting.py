@@ -20,12 +20,8 @@ def set_style():
 
 
 def plot_steps_allocation(N, steps, ds_name, ref_exponent=0.8):
-    """
-    Verifies that training steps follow S ∝ N^0.8 .
-    """
     fig, ax = plt.subplots(figsize=(6, 5))
     ax.loglog(N, steps, 'o-', color='C0', markersize=8, label=f'{ds_name} Measured steps')
-
     # Reference line with the expected scaling exponent
     ref_steps = max(steps) * (N / max(N)) ** ref_exponent
     ax.loglog(N, ref_steps, '--', color='gray', alpha=0.7,
@@ -45,9 +41,6 @@ def plot_steps_allocation(N, steps, ds_name, ref_exponent=0.8):
     plt.show()
 
 
-def plot_flops_allocation():
-    pass
-
 
 def plot_scaling_law(N, loss, ds_name):
     fig, ax = plt.subplots(figsize=(6, 5))
@@ -58,10 +51,8 @@ def plot_scaling_law(N, loss, ds_name):
     fit = np.exp(coeffs[1]) * N ** coeffs[0]
     ax.loglog(N, fit, '--', color='gray', alpha=0.7,
               label=f'Fit: $L \\propto N^{{{coeffs[0]:.2f}}}$')
-
     ax = show_exact_values(ax, loss, "y")
     ax = show_exact_values(ax, N, "x")
-
     ax.grid(True, which='major', ls='--', alpha=0.5)
     ax.set_xlabel('Dataset size $N$')
     ax.set_ylabel('Validation loss $L$')
@@ -73,49 +64,78 @@ def plot_scaling_law(N, loss, ds_name):
     plt.show()
 
 
-def plot_imagenet_vs_fornet_scaling_comparison(N, loss_imagenet, loss_fornet):
+def plot_dataset_size_scaling_comparison(N, imgnet_loss, fornet_loss):
     fig, ax = plt.subplots(figsize=(6, 5))
-
-    ax.loglog(N, loss_imagenet, 'o-', color='C3', markersize=8, label='ImageNet')
-    ax.loglog(N, loss_fornet, 's-', color='C4', markersize=8, label='ForNet')
-
+    ax.loglog(N, imgnet_loss, 'o-', color='C3', markersize=8, label='ImageNet')
+    ax.loglog(N, fornet_loss, 's-', color='C4', markersize=8, label='ForNet')
     # Power‑law fit for ImageNet
-    log_N_imgnet, log_L_imgnet = np.log(N), np.log(loss_imagenet)
+    log_N_imgnet, log_L_imgnet = np.log(N), np.log(imgnet_loss)
     coeffs_imgnet = np.polyfit(log_N_imgnet, log_L_imgnet, 1)
     fit_imgnet = np.exp(coeffs_imgnet[1]) * N ** coeffs_imgnet[0]
     ax.loglog(N, fit_imgnet, '--', color='orange', alpha=0.7,
               label=f'ImageNet Fit: $L \\propto N^{{{coeffs_imgnet[0]:.2f}}}$')
     # Power‑law fit for ForNet
-    log_N_fornet, log_L_fornet = np.log(N), np.log(loss_fornet)
+    log_N_fornet, log_L_fornet = np.log(N), np.log(fornet_loss)
     coeffs_fornet = np.polyfit(log_N_fornet, log_L_fornet, 1)
     fit_fornet = np.exp(coeffs_fornet[1]) * N ** coeffs_fornet[0]
     ax.loglog(N, fit_fornet, '--', color='green', alpha=0.7,
               label=f'ForNet Fit: $L \\propto N^{{{coeffs_fornet[0]:.2f}}}$')
-
-    all_loss_values =  pd.concat([loss_imagenet, loss_fornet], ignore_index=True)
+    all_loss_values =  pd.concat([imgnet_loss, fornet_loss], ignore_index=True)
     ax = show_exact_values(ax, all_loss_values, "y")
     ax = show_exact_values(ax, N, "x")
-
     ax.set_xlabel('Dataset size $N$')
     ax.set_ylabel('Validation loss $L$')
-    ax.set_title('Scaling Comparison: ImageNet vs ForNet')
+    ax.set_title('Dataset Scaling Comparison: ImageNet vs ForNet')
     ax.legend()
     ax.grid(True, which='major', ls='--', alpha=0.5)
     ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f'{x:,.0f}'))
     plt.tight_layout()
-    fig.savefig(PDF_OUTPUTS_DIR / 'imagenet_vs_fornet_scaling_comparison.pdf')
-    fig.savefig(IMG_OUTPUT_DIR / 'imagenet_vs_fornet_scaling_comparison.png')
+    fig.savefig(PDF_OUTPUTS_DIR / 'dataset_size_scaling_comparison.pdf')
+    fig.savefig(IMG_OUTPUT_DIR / 'dataset_size_scaling_comparison.png')
     plt.show()
 
 
-def plot_imagenet_vs_fornet_acc_comparison(N, imgnet_acc, fornet_acc, acc_type:str):
+def plot_flops_scaling_comparison(flops, imgnet_loss, fornet_loss):
+    fig, ax = plt.subplots(figsize=(6, 5))
+    ax.loglog(flops,imgnet_loss, 'o-', color='C3', markersize=8, label='ImageNet')
+    ax.loglog(flops,fornet_loss, 's-', color='C4', markersize=8, label='ForNet')
+    # Power‑law fit for ImageNet
+    log_flops_imgnet, log_L_imgnet = np.log(flops), np.log(imgnet_loss)
+    coeffs_imgnet = np.polyfit(log_flops_imgnet, log_L_imgnet, 1)
+    fit_imgnet = np.exp(coeffs_imgnet[1]) * flops ** coeffs_imgnet[0]
+    ax.loglog(flops, fit_imgnet, '--', color='orange', alpha=0.7,
+              label=f'ImageNet Fit: $L \\propto N^{{{coeffs_imgnet[0]:.2f}}}$')
+    # Power‑law fit for ForNet
+    log_flops_fornet, log_L_fornet = np.log(flops), np.log(fornet_loss)
+    coeffs_fornet = np.polyfit(log_flops_fornet, log_L_fornet, 1)
+    fit_fornet = np.exp(coeffs_fornet[1]) * flops ** coeffs_fornet[0]
+    ax.loglog(flops, fit_fornet, '--', color='green', alpha=0.7,
+              label=f'ForNet Fit: $L \\propto N^{{{coeffs_fornet[0]:.2f}}}$')
+    all_loss_values =  pd.concat([imgnet_loss, fornet_loss], ignore_index=True)
+    ax = show_exact_values(ax, all_loss_values, "y")
+    ax.xaxis.set_major_locator(ticker.FixedLocator(flops))
+    ax.xaxis.set_major_formatter(
+        ticker.FuncFormatter(lambda x, _: f'{x / 1e18:.1f}e18')
+    )
+    ax.xaxis.set_minor_locator(ticker.NullLocator())
+    ax.set_xlabel('Training Compute (FLOPs) $N$')
+    ax.set_ylabel('Validation loss $L$')
+    ax.set_title('Compute Scaling Comparison: ImageNet vs ForNet')
+    ax.legend()
+    ax.grid(True, which='major', ls='--', alpha=0.5)
+    plt.tight_layout()
+    fig.savefig(PDF_OUTPUTS_DIR / 'flops_scaling_comparison.pdf')
+    fig.savefig(IMG_OUTPUT_DIR / 'flops_scaling_comparison.png')
+    plt.show()
+
+
+def plot_acc_comparison(N, imgnet_acc, fornet_acc, acc_type:str):
     fig, ax = plt.subplots(figsize=(6, 5))
     ax.plot(N, imgnet_acc, 'o-', color='C2', markersize=8, label="ImageNet") # Linear plot
     ax.plot(N, fornet_acc, 'd-', color='C3', markersize=8, label="ForNet") # Linear plot
     all_accuracy_values = pd.concat([imgnet_acc, fornet_acc] , ignore_index=True)
     show_exact_values(ax, all_accuracy_values, "y")
     show_exact_values(ax, N, "x")
-
     ax.set_xlabel('Dataset size $N$')
     ax.set_ylabel(f'{acc_type} Accuracy (%)')
     ax.set_title(f'{acc_type} Accuracy vs Dataset Size')
@@ -123,8 +143,58 @@ def plot_imagenet_vs_fornet_acc_comparison(N, imgnet_acc, fornet_acc, acc_type:s
     ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f'{x:,.0f}'))
     ax.grid(True, ls='--', alpha=0.5)
     plt.tight_layout()
-    fig.savefig(PDF_OUTPUTS_DIR / f'imagenet_vs_fornet_{acc_type.lower()}_acc_comparison.pdf')
-    fig.savefig(IMG_OUTPUT_DIR / f'imagenet_vs_fornet_{acc_type.lower()}_acc_comparison.png')
+    fig.savefig(PDF_OUTPUTS_DIR / f'{acc_type.lower()}_acc_comparison.pdf')
+    fig.savefig(IMG_OUTPUT_DIR / f'{acc_type.lower()}_acc_comparison.png')
+    plt.show()
+
+
+def plot_compute_efficiency_comparison(flops, imgnet_acc, fornet_acc, acc_type='Top-1'):
+    set_style()
+    fig, ax = plt.subplots(figsize=(6, 5))
+    ax.plot(flops, imgnet_acc, 'o-', color='C2', markersize=8, label='ImageNet')
+    ax.plot(flops, fornet_acc, 's-', color='C3', markersize=8, label='ForNet')
+    all_acc = np.concatenate([imgnet_acc, fornet_acc])
+    show_exact_values(ax, all_acc, "y")
+    ax.xaxis.set_major_locator(ticker.FixedLocator(flops))
+    ax.xaxis.set_major_formatter(
+        ticker.FuncFormatter(lambda x, _: f'{x/1e18:.1f}e18')
+    )
+    ax.xaxis.set_minor_locator(ticker.NullLocator())
+    ax.set_xlabel('Training compute (FLOPs)')
+    ax.set_ylabel(f'{acc_type} Accuracy (%)')
+    ax.set_title(f'Compute Efficiency: {acc_type} Accuracy vs FLOPs')
+    ax.legend()
+    ax.grid(True, ls='--', alpha=0.5)
+    plt.tight_layout()
+    fig.savefig(PDF_OUTPUTS_DIR / f'{acc_type.lower()}_compute_efficiency_comparison.pdf')
+    fig.savefig(IMG_OUTPUT_DIR / f'{acc_type.lower()}_compute_efficiency_comparison.png')
+    plt.show()
+
+
+def plot_sample_efficiency_comparison(N, imgnet_acc, fornet_acc, acc_type='Top-1',
+                           target_accuracy=None):
+    set_style()
+    fig, ax = plt.subplots(figsize=(6, 5))
+    ax.plot(N, imgnet_acc, 'o-', color='C2', markersize=8, label='ImageNet')
+    ax.plot(N, fornet_acc, 'd-', color='C3', markersize=8, label='ForNet')
+    all_acc = np.concatenate([imgnet_acc, fornet_acc])
+    show_exact_values(ax, all_acc, "y")
+    show_exact_values(ax, N, "x")
+    ax.xaxis.set_major_formatter(
+        ticker.FuncFormatter(lambda x, _: f'{int(x):,}')
+    )
+    if target_accuracy is not None:
+        ax.axhline(y=target_accuracy, color='grey', linestyle=':', alpha=0.7,
+                   label=f'{target_accuracy}% target')
+        ax.legend()
+    ax.set_xlabel('Number of training samples')
+    ax.set_ylabel(f'{acc_type} Accuracy (%)')
+    ax.set_title(f'Sample Efficiency: {acc_type} Accuracy vs Dataset Size')
+    ax.legend()
+    ax.grid(True, ls='--', alpha=0.5)
+    plt.tight_layout()
+    fig.savefig(PDF_OUTPUTS_DIR / f'{acc_type.lower()}_sample_efficiency_comparison.pdf')
+    fig.savefig(IMG_OUTPUT_DIR / f'{acc_type.lower()}_sample_efficiency_comparison.png')
     plt.show()
 
 
