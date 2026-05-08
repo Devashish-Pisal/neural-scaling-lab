@@ -11,7 +11,8 @@ if __name__ == '__main__':
     result = load_raw_data()
     imgnet_data = get_imagenet_data(result[0],csv_config)
     fornet_data = get_fornet_data(result[0], csv_config)
-    ds_samples = imgnet_data[csv_config.real_ds_samples]  # fornet_data.real_ds_samples also works
+    ds_samples = imgnet_data[csv_config.real_ds_samples]  # fornet_data.real_ds_samples also works (both are same)
+    flops = imgnet_data[csv_config.real_FLOPs] # fornet_data.real_flops also works (both are same)
 
     imgnet_steps = imgnet_data[csv_config.real_steps]
     fornet_steps = fornet_data[csv_config.real_steps]
@@ -28,11 +29,16 @@ if __name__ == '__main__':
     set_style()
     # plot_scaling_law(ds_samples, imgnet_val_loss, "ImageNet")
     # plot_scaling_law(ds_samples, fornet_val_loss, "ForNet")
-    # plot_imagenet_vs_fornet_scaling_comparison(ds_samples, imgnet_val_loss, fornet_val_loss)
-    # plot_imagenet_vs_fornet_acc_comparison(ds_samples, imgnet_top_1_acc, fornet_top_1_acc, "Top-1")
-    # plot_imagenet_vs_fornet_acc_comparison(ds_samples, imgnet_top_5_acc, fornet_top_5_acc, "Top-5")
+    # plot_dataset_size_scaling_comparison(ds_samples, imgnet_val_loss, fornet_val_loss)
+    # plot_acc_comparison(ds_samples, imgnet_top_1_acc, fornet_top_1_acc, "Top-1")
+    # plot_acc_comparison(ds_samples, imgnet_top_5_acc, fornet_top_5_acc, "Top-5")
     # plot_steps_allocation(ds_samples, imgnet_steps, "ImageNet")
     # plot_steps_allocation(ds_samples, fornet_steps, "ForNet")
+    # plot_flops_scaling_comparison(flops, imgnet_val_loss, fornet_val_loss)
+    # plot_compute_efficiency_comparison(flops, imgnet_top_1_acc, fornet_top_1_acc, "Top-1")
+    # plot_compute_efficiency_comparison(flops, imgnet_top_5_acc, fornet_top_5_acc, "Top-5")
+    # plot_sample_efficiency_comparison(ds_samples, imgnet_top_1_acc, fornet_top_1_acc, "Top-1", 0.70)
+    # plot_sample_efficiency_comparison(ds_samples, imgnet_top_5_acc, fornet_top_5_acc, "Top-5", 0.90)
 
 
 
