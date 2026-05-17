@@ -3,12 +3,11 @@ from pathlib import Path
 from configs.path_config import RAW_DATA_DIR
 
 
-def load_raw_data():
+def load_raw_file(file_name:Path):
     results = []
-    for item in RAW_DATA_DIR.iterdir():
-        if item.is_file() and str(item).endswith(".csv"):
-            df = pd.read_csv(item)
-            results.append(df)
+    if file_name.exists() and file_name.is_file() and str(file_name).endswith(".csv"):
+        df = pd.read_csv(file_name)
+        results.append(df)
     return results
 
 
