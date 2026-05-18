@@ -202,7 +202,9 @@ def plot_exponent_scaling_consistency(
         all_results,
         csv_config,
         ds_name):
-    fig, ax = plt.subplots(figsize=(6, 5))
+    fig, ax = plt.subplots(
+        figsize=(6, 5)
+    )
     colors = {
         0.6: 'C0',
         0.8: 'C1',
@@ -213,20 +215,35 @@ def plot_exponent_scaling_consistency(
             data = result["imagenet"]
         else:
             data = result["fornet"]
-        D = data[csv_config.real_ds_samples]
-        L = data[csv_config.min_val_loss]
+        D = data[
+            csv_config.real_ds_samples
+        ]
+        L = data[
+            csv_config.min_val_loss
+        ]
+        log_D = np.log(D)
+        log_L = np.log(L)
+        coeffs = np.polyfit(
+            log_D,
+            log_L,
+            1
+        )
+        k = -coeffs[0]
+        fit = (
+            np.exp(coeffs[1]) *
+            D ** coeffs[0]
+        )
         ax.loglog(
             D,
             L,
             'o-',
             color=colors[exponent],
             markersize=8,
-            label=fr'$\alpha={exponent}$'
+            label=(
+                fr'$\alpha={exponent}$, '
+                fr'$L \propto D^{{-{k:.2f}}}$'
+            )
         )
-        log_D = np.log(D)
-        log_L = np.log(L)
-        coeffs = np.polyfit(log_D, log_L, 1)
-        fit = np.exp(coeffs[1]) * D ** coeffs[0]
         ax.loglog(
             D,
             fit,
@@ -234,9 +251,17 @@ def plot_exponent_scaling_consistency(
             color=colors[exponent],
             alpha=0.5
         )
-    show_exact_values(ax, D, "x")
-    ax.set_xlabel('Dataset size $D$')
-    ax.set_ylabel('Best validation loss $L$')
+    show_exact_values(
+        ax,
+        D,
+        "x"
+    )
+    ax.set_xlabel(
+        'Dataset size $D$'
+    )
+    ax.set_ylabel(
+        'Best validation loss $L$'
+    )
     ax.set_title(
         f'{ds_name}: exponent comparison'
     )
@@ -257,6 +282,7 @@ def plot_exponent_scaling_consistency(
         f'{ds_name.lower()}_exponent_scaling.png'
     )
     plt.show()
+
 
 
 
