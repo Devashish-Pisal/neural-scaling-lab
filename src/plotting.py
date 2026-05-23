@@ -285,14 +285,13 @@ def plot_exponent_scaling_consistency(
 
 
 
-
 def plot_exponent_fit_quality(
         all_results,
         csv_config):
     exponents = []
     r2_scores = []
     for exponent, result in all_results.items():
-        losses = []
+        dataset_r2_scores = []
         for ds_name in ["imagenet", "fornet"]:
             data = result[ds_name]
             D = data[
@@ -318,25 +317,54 @@ def plot_exponent_fit_quality(
             ss_tot = np.sum(
                 (log_L - np.mean(log_L)) ** 2
             )
-            r2 = 1 - (ss_res / ss_tot)
-            losses.append(r2)
-        exponents.append(exponent)
+            r2 = (
+                1 -
+                (ss_res / ss_tot)
+            )
+            dataset_r2_scores.append(
+                r2
+            )
+        exponents.append(
+            exponent
+        )
         r2_scores.append(
-            np.mean(losses)
+            np.mean(
+                dataset_r2_scores
+            )
         )
     fig, ax = plt.subplots(
         figsize=(6, 5)
     )
-    ax.bar(
+    bars = ax.bar(
         exponents,
         r2_scores,
         width=0.12
     )
+    min_r2 = min(
+        r2_scores
+    )
+    zoom_margin = 0.01
+    ax.set_ylim(
+        min_r2 - zoom_margin,
+        1.0
+    )
+    for bar, r2 in zip(
+            bars,
+            r2_scores):
+        ax.text(
+            bar.get_x() +
+            bar.get_width() / 2,
+            r2 + 0.001,
+            f'{r2:.4f}',
+            ha='center',
+            va='bottom',
+            fontsize=11
+        )
     ax.set_xlabel(
-        'Scaling exponent'
+        'Scaling exponent $\\alpha$'
     )
     ax.set_ylabel(
-        '$R^2$'
+        'Mean $R^2$'
     )
     ax.set_title(
         'Power-law fit quality'
@@ -357,6 +385,7 @@ def plot_exponent_fit_quality(
         'exponent_fit_quality.png'
     )
     plt.show()
+
 
 
 '''
