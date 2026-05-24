@@ -43,7 +43,6 @@ def validate_fornet_run(run:Run, expected_model:str):
     id = run.id
     name = run.name
     config = run.config
-    keywords = [config["model"].replace("/", "-"), "fornet", ("fg-" + config["fg_range"]), ("bg-" + config["bg_range"]), ("ep-" + str(config["epochs"]))]
     if run.state != "finished":
         raise ValueError(f"Run {id} | Run state is not 'finished'. Expected run state 'finished' but got '{run.state}' | Run name '{name}'")
     if config["model"].lower().replace("/", "-") != expected_model.lower().replace("/", "-"):
@@ -62,6 +61,7 @@ def validate_fornet_run(run:Run, expected_model:str):
         raise ValueError(f"Run {id} | Invalid validation dataset | Expected 'imagenet' but got {config["val_dataset"]} | Run name '{name}'")
     if not is_fg_range_and_epochs_mapping_correct(config["fg_range"], config["epochs"]):
         raise ValueError(f"Run {id} | FG range and epoch mapping is incorrect | FG range {config["fg_range"]} | Epoch {config["epochs"]} | Run name '{name}'")
+    keywords = [config["model"].replace("/", "-"), "fornet", ("fg-" + config["fg_range"]), ("bg-" + config["bg_range"]), ("ep-" + str(config["epochs"]))]
     if not contains_run_name_keywords(name, keywords):
         raise ValueError(f"Run {id} | Keywords are not matching with run name | Keywords {keywords} | Run name '{name}'")
 
@@ -142,8 +142,8 @@ def save_run_data_to_db(run:Run, dataset:str):
         row["final_val_acc5"] = perform_column_operation(history["val/acc5"], "final")
         row["final_train_loss"] = perform_column_operation(history["train/loss"], "final")
         row["total_runtime"] = perform_column_operation(history["_runtime"], "final")
-        row["steps_per_epoch"] = row["fg_count"] / EXPERIMENT_CONSTANTS["global_batch_size"]
-        row["total_steps"] = row["steps_per_epoch"] * config["epochs"]
+        row["steps_per_epoch"] = int(row["fg_count"] / EXPERIMENT_CONSTANTS["global_batch_size"])
+        row["total_steps"] = int(row["steps_per_epoch"] * config["epochs"])
         row["total_flops"] = "null"
         row["gpu_partition"] = metadata["gpu"]
 
