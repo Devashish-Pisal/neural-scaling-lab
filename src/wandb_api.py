@@ -6,7 +6,7 @@ from loguru import logger
 from dotenv import load_dotenv
 from pprint import pprint
 from configs.path_config import MAIN_DATABASE_PATH
-from configs.config import WANDB_RUN_CONFIG, DB_COLUMNS, EXPERIMENT_CONSTANTS
+from configs.config import WANDB_RUN_CONFIG, DB_COLUMNS, EXPERIMENT_CONSTANTS, FG_RANGE_COUNT_MAPPING, BG_RANGE_COUNT_MAPPING
 
 
 
@@ -106,21 +106,22 @@ def perform_column_operation(column:pd.Series, operation:str):
 
 
 def save_run_data_to_db(run:Run, dataset:str):
-    database_df = pd.read_csv(MAIN_DATABASE_PATH)
+    database_df = pd.read_csv(MAIN_DATABASE_PATH, keep_default_na=False)
     if not run.id in database_df["run_id"].values:
         config = run.config  # dict
         metadata = run.metadata  # dict
         history = pd.DataFrame(run.scan_history()) # dataframe
         row = DB_COLUMNS.copy()
+        # pprint(config)
         row["run_id"] = run.id
         row["run_name"] = run.name
         row["model_name"] = config["model"]
         row["train_dataset_name"] = config["dataset"]
         row["fg_range"] = config["fg_range"]
-        row["bg_range"] = config["bg_range"]
-        row["fg_count"] = config["fg_count"]
-        row["bg_count"] = config["bg_count"]
-        row["train_dataset_size"] = config["fg_count"]
+        row["bg_range"] = "null" if config["bg_range"] is None else config["bg_range"]
+        row["fg_count"] = FG_RANGE_COUNT_MAPPING[config["fg_range"]]
+        row["bg_count"] = BG_RANGE_COUNT_MAPPING[row["bg_range"]]
+        row["train_dataset_size"] = row["fg_count"]
 
         fg_range_list = config["fg_range"].split("-")
         start = int(fg_range_list[0])
@@ -128,24 +129,27 @@ def save_run_data_to_db(run:Run, dataset:str):
         row["train_dataset_fraction"] = (end-start)/100
 
         row["total_epochs"] = config["epochs"]
-
         row["min_train_loss"] = perform_column_operation(history["train/loss"], "min")
         row["min_val_loss"] = perform_column_operation(history["val/loss"], "min")
-        row["min_val_loss_epoch"] = None
+        row["min_val_loss_epoch"] =  history.loc[history["val/loss"].idxmin(), "epoch"]
         row["max_val_acc1"] = perform_column_operation(history["val/acc1"], "max")
-        row["max_val_acc1_epoch"] = None
+        row["max_val_acc1_epoch"] = history.loc[history["val/acc1"].idxmax(), "epoch"]
         row["max_val_acc5"] = perform_column_operation(history["val/acc5"], "max")
-        row["max_val_acc5_epoch"] = None
+        row["max_val_acc5_epoch"] =  history.loc[history["val/acc5"].idxmax(), "epoch"]
         row["final_val_loss"] = perform_column_operation(history["val/loss"], "final")
         row["final_val_acc1"] = perform_column_operation(history["val/acc1"], "final")
         row["final_val_acc5"] = perform_column_operation(history["val/acc5"], "final")
         row["final_train_loss"] = perform_column_operation(history["train/loss"], "final")
         row["total_runtime"] = perform_column_operation(history["_runtime"], "final")
-        row["steps_per_epoch"] = None
-        row["total_steps"] = None
+        row["steps_per_epoch"] = row["fg_count"] / EXPERIMENT_CONSTANTS["global_batch_size"]
+        row["total_steps"] = row["steps_per_epoch"] * config["epochs"]
         row["total_flops"] = None
         row["gpu_partition"] = metadata["gpu"]
 
+        new_row = pd.DataFrame([row], columns=DB_COLUMNS.keys())
+        df_combined = pd.concat([database_df, new_row], axis=0)
+        df_combined.to_csv(MAIN_DATABASE_PATH, index=False)
+        logger.info(f"New row written to database | Row {row}")
     else:
         logger.info(f"Data of run {run.id} is already stored in database | Run name '{run.name}'")
 
