@@ -6,7 +6,7 @@ from loguru import logger
 from dotenv import load_dotenv
 from pprint import pprint
 from configs.path_config import MAIN_DATABASE_PATH
-from configs.config import WANDB_RUN_CONFIG, DB_COLUMNS
+from configs.config import WANDB_RUN_CONFIG, DB_COLUMNS, EXPERIMENT_CONSTANTS
 
 
 
@@ -97,7 +97,13 @@ def create_main_database():
         logger.info(f"Database file already exists at path '{MAIN_DATABASE_PATH}'")
 
 
-def
+def perform_column_operation(column:pd.Series, operation:str):
+    match operation:
+        case "max": return column.max()
+        case "min": return column.min()
+        case "final": return column.iloc[-1]
+    raise ValueError(f"Operation '{operation}' is not implemented")
+
 
 def save_run_data_to_db(run:Run, dataset:str):
     database_df = pd.read_csv(MAIN_DATABASE_PATH)
@@ -115,10 +121,30 @@ def save_run_data_to_db(run:Run, dataset:str):
         row["fg_count"] = config["fg_count"]
         row["bg_count"] = config["bg_count"]
         row["train_dataset_size"] = config["fg_count"]
-        row["train_dataset_fraction"] = None
+
+        fg_range_list = config["fg_range"].split("-")
+        start = int(fg_range_list[0])
+        end = int(fg_range_list[1])
+        row["train_dataset_fraction"] = (end-start)/100
+
         row["total_epochs"] = config["epochs"]
 
-        row["min_train_loss"] = None
+        row["min_train_loss"] = perform_column_operation(history["train/loss"], "min")
+        row["min_val_loss"] = perform_column_operation(history["val/loss"], "min")
+        row["min_val_loss_epoch"] = None
+        row["max_val_acc1"] = perform_column_operation(history["val/acc1"], "max")
+        row["max_val_acc1_epoch"] = None
+        row["max_val_acc5"] = perform_column_operation(history["val/acc5"], "max")
+        row["max_val_acc5_epoch"] = None
+        row["final_val_loss"] = perform_column_operation(history["val/loss"], "final")
+        row["final_val_acc1"] = perform_column_operation(history["val/acc1"], "final")
+        row["final_val_acc5"] = perform_column_operation(history["val/acc5"], "final")
+        row["final_train_loss"] = perform_column_operation(history["train/loss"], "final")
+        row["total_runtime"] = perform_column_operation(history["_runtime"], "final")
+        row["steps_per_epoch"] = None
+        row["total_steps"] = None
+        row["total_flops"] = None
+        row["gpu_partition"] = metadata["gpu"]
 
     else:
         logger.info(f"Data of run {run.id} is already stored in database | Run name '{run.name}'")
