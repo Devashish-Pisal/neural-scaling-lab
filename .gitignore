@@ -9,6 +9,9 @@ __pycache__/
 # IntelliJ Folders
 .idea/
 
+
+wandb_api_objects_structure.txt
+
 # Distribution / packaging
 .Python
 build/
