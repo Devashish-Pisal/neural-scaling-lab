@@ -1,6 +1,6 @@
 import numpy as np
 from types import SimpleNamespace
-from configs.csv_file_config import COLUMN_NAMES
+from configs.config import COLUMN_NAMES
 from configs.path_config import RAW_DATA_DIR
 from src.plotting import *
 from src.data_processing import get_imagenet_data, get_fornet_data, load_raw_file
@@ -9,8 +9,9 @@ from src.data_processing import get_imagenet_data, get_fornet_data, load_raw_fil
 if __name__ == '__main__':
     csv_config = SimpleNamespace(**COLUMN_NAMES)
 
-    output_file_path = RAW_DATA_DIR / "steps_scaling_exponent-1.0_output.csv"
-    scaling_exponent = 1.0
+    '''
+    output_file_path = RAW_DATA_DIR / "steps_scaling_exponent-0.6_output.csv"
+    scaling_exponent = 0.6
 
     result = load_raw_file(output_file_path)
     imgnet_data = get_imagenet_data(result[0],csv_config)
@@ -46,6 +47,53 @@ if __name__ == '__main__':
 
     plot_sample_efficiency_comparison(ds_samples, imgnet_top_1_acc, fornet_top_1_acc, "Top-1", 0.70)
     plot_sample_efficiency_comparison(ds_samples, imgnet_top_5_acc, fornet_top_5_acc, "Top-5", 0.90)
+    '''
+
+    scaling_exponents = [0.6, 0.8, 1.0]
+    all_results = {}
+    for exponent in scaling_exponents:
+        file_path = (
+            RAW_DATA_DIR /
+            f"steps_scaling_exponent-{exponent}_output.csv"
+        )
+        df = load_raw_file(file_path)[0]
+        all_results[exponent] = {
+            "imagenet": get_imagenet_data(df, csv_config),
+            "fornet": get_fornet_data(df, csv_config)
+        }
+    set_style()
+
+    '''
+    plot_exponent_scaling_consistency(
+        all_results,
+        csv_config,
+        "ImageNet"
+    )
+    plot_exponent_scaling_consistency(
+        all_results,
+        csv_config,
+        "ForNet"
+    )
+    '''
+
+    plot_exponent_fit_quality(
+        all_results,
+        csv_config
+    )
+
+    '''
+    plot_exponent_compute_efficiency(
+        all_results,
+        csv_config,
+        "ImageNet"
+    )
+    plot_exponent_compute_efficiency(
+        all_results,
+        csv_config,
+        "ForNet"
+    )
+    '''
+
 
 
 
