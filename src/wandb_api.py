@@ -130,6 +130,7 @@ def save_run_data_to_db(run:Run, dataset:str):
 
         row["total_epochs"] = config["epochs"]
         row["min_train_loss"] = perform_column_operation(history["train/loss"], "min")
+        row["min_train_loss_epoch"] = history.loc[history["train/loss"].idxmin(), "epoch"]
         row["min_val_loss"] = perform_column_operation(history["val/loss"], "min")
         row["min_val_loss_epoch"] =  history.loc[history["val/loss"].idxmin(), "epoch"]
         row["max_val_acc1"] = perform_column_operation(history["val/acc1"], "max")
@@ -143,7 +144,7 @@ def save_run_data_to_db(run:Run, dataset:str):
         row["total_runtime"] = perform_column_operation(history["_runtime"], "final")
         row["steps_per_epoch"] = row["fg_count"] / EXPERIMENT_CONSTANTS["global_batch_size"]
         row["total_steps"] = row["steps_per_epoch"] * config["epochs"]
-        row["total_flops"] = None
+        row["total_flops"] = "null"
         row["gpu_partition"] = metadata["gpu"]
 
         new_row = pd.DataFrame([row], columns=DB_COLUMNS.keys())
