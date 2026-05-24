@@ -4,7 +4,6 @@ import pandas as pd
 from wandb import Run
 from loguru import logger
 from dotenv import load_dotenv
-from pprint import pprint
 from configs.path_config import MAIN_DATABASE_PATH
 from configs.config import WANDB_RUN_CONFIG, DB_COLUMNS, EXPERIMENT_CONSTANTS, FG_RANGE_COUNT_MAPPING, BG_RANGE_COUNT_MAPPING
 
@@ -112,7 +111,6 @@ def save_run_data_to_db(run:Run, dataset:str):
         metadata = run.metadata  # dict
         history = pd.DataFrame(run.scan_history()) # dataframe
         row = DB_COLUMNS.copy()
-        # pprint(config)
         row["run_id"] = run.id
         row["run_name"] = run.name
         row["model_name"] = config["model"]
@@ -165,11 +163,9 @@ if __name__=="__main__":
     project_name = os.getenv("WANDB_PROJECT_NAME")
     models = WANDB_RUN_CONFIG.keys()
     create_main_database()
-
     for model in models:
         imgnet_runs = WANDB_RUN_CONFIG[model]["imagenet_run_ids"]
         fornet_runs = WANDB_RUN_CONFIG[model]["fornet_run_ids"]
-
         for run_id in imgnet_runs:
             run = api.run(f"{entity}/{project_name}/{run_id}")
             validate_imgnet_run(run, model)
