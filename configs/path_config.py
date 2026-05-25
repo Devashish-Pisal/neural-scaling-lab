@@ -7,6 +7,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 # Folders
 CONFIGS_DIR = PROJECT_ROOT / "configs"
 DATA_DIR = PROJECT_ROOT / "data"
+DATABASE_DIR = DATA_DIR / "database"
 RAW_DATA_DIR = DATA_DIR / "raw"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
 OUTPUT_DIR = PROJECT_ROOT / "outputs"
@@ -17,4 +18,4 @@ TESTS_DIR = PROJECT_ROOT / "tests"
 
 
 # Files
-# TODO
+MAIN_DATABASE_PATH = DATABASE_DIR / "all_runs.csv"
