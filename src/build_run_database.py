@@ -76,6 +76,18 @@ def is_fg_range_and_epochs_mapping_correct(fg_range, epoch):
     )
 
 
+def check_ds_fraction_and_run_id_mapping(run:Run, ds_fraction_from_mapping:float):
+    actual_fg_range = run.config["fg_range"]
+    output = ((actual_fg_range == "0-10" and ds_fraction_from_mapping == 0.10) or
+              (actual_fg_range == "0-25" and ds_fraction_from_mapping == 0.25) or
+              (actual_fg_range == "0-50" and ds_fraction_from_mapping == 0.50) or
+              (actual_fg_range == "0-100" and ds_fraction_from_mapping == 1.00)
+              )
+    if not output:
+        raise ValueError(f"Fraction - ID mapping for run id {run.id} is incorrect in config.py. For {actual_fg_range} mapped {ds_fraction_from_mapping}"
+                         f" | Run name {run.name}")
+
+
 def contains_run_name_keywords(run_name:str, keywords:list[str]):
     run_name = run_name.strip().lower()
     keywords = [keyword.strip().lower() for keyword in keywords]
@@ -84,6 +96,14 @@ def contains_run_name_keywords(run_name:str, keywords:list[str]):
             print(f"Run Name: {run_name} | Keyword: {kw}")
             return False
     return True
+
+
+def calculate_flops(model_name, total_steps):
+    model_param_count = EXPERIMENT_CONSTANTS["model_parameters"][model_name]
+    model_name = model_name.split("/")
+    assert len(model_name) == 2
+    patch_size = int(model_name[1])
+    return 6*model_param_count*((EXPERIMENT_CONSTANTS["dataset_image_resolution"]/patch_size) ** (2) + 1)*EXPERIMENT_CONSTANTS["global_batch_size"]*total_steps
 
 
 def create_main_database():
@@ -142,7 +162,7 @@ def save_run_data_to_db(run:Run, dataset:str):
         row["total_runtime"] = perform_column_operation(history["_runtime"], "final")
         row["steps_per_epoch"] = int(row["fg_count"] / EXPERIMENT_CONSTANTS["global_batch_size"])
         row["total_steps"] = int(row["steps_per_epoch"] * config["epochs"])
-        row["total_flops"] = "null"
+        row["total_flops"] = calculate_flops(config["model"].strip().lower(), row["total_steps"])
         row["gpu_partition"] = metadata["gpu"]
 
         new_row = pd.DataFrame([row], columns=DB_COLUMNS.keys())
@@ -164,17 +184,21 @@ if __name__=="__main__":
     models = WANDB_RUN_CONFIG.keys()
     create_main_database()
     for model in models:
-        imgnet_runs = WANDB_RUN_CONFIG[model]["imagenet_run_ids"]
-        fornet_runs = WANDB_RUN_CONFIG[model]["fornet_run_ids"]
-        for run_id in imgnet_runs:
-            run = api.run(f"{entity}/{project_name}/{run_id}")
+        imgnet_runs_dict = WANDB_RUN_CONFIG[model]["imagenet_run_ids"]
+        fornet_runs_dict = WANDB_RUN_CONFIG[model]["fornet_run_ids"]
+        for fraction, ids in imgnet_runs_dict.items():
+            assert len(ids) == 1
+            run = api.run(f"{entity}/{project_name}/{ids[0]}")
+            check_ds_fraction_and_run_id_mapping(run, fraction)
             validate_imgnet_run(run, model)
             save_run_data_to_db(run, run.config["dataset"])
-        continue
-        for run_id in fornet_runs:
-            run = api.run(f"{entity}/{project_name}/{run_id}")
-            validate_fornet_run(run, model)
-            save_run_data_to_db(run, run.config["dataset"])
+        for fraction, ids in fornet_runs_dict.items():
+            assert 0 < len(ids) < 5
+            for run_id in ids:
+                run = api.run(f"{entity}/{project_name}/{run_id}")
+                check_ds_fraction_and_run_id_mapping(run, fraction)
+                validate_fornet_run(run, model)
+                save_run_data_to_db(run, run.config["dataset"])
         logger.info(f"All '{model}' model model runs are processed.")
 
 
