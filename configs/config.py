@@ -22,19 +22,26 @@ COLUMN_NAMES = {
 
 WANDB_RUN_CONFIG = {
     "vit-s/16": {
-        "imagenet_run_ids": ["7zhrps5n", "f89h2iep", "q7pwnnmk", "p4lmf22i"], # for ds size [1.0, 0.5, 0.25, 0.10]
+        "imagenet_run_ids": {
+            1.00: ["7zhrps5n"],
+            0.50: ["f89h2iep"],
+            0.25: ["q7pwnnmk"],
+            0.10: ["p4lmf22i"],
+        },
         "fornet_run_ids": {
-            "1.0" : [],
-            "0.5" : [],
-            "0.25" : [],
-            "0.10" : [],
+            1.00 : ["bdz7rm89"],  # in descending bg-range order ["0-100", "0-50", "0-25", "0-10"]
+            0.50 : ["tad9m3tt"],
+            0.25 : ["5ndq2oce"],
+            0.10 : ["giqxrx3p"],
         },
     },
     # add vit-s/32, vit-b/16, vit-s/32, vit-b/28, etc.
 }
 
 
+
 EXPERIMENT_CONSTANTS = {
+    "dataset_image_resolution": 224, # (224 x 224) px image resolution of ImageNet-1k dataset samples
     "global_batch_size": 2048,
     "model_parameters":{
         "vit-s/16": 22_000_000,
