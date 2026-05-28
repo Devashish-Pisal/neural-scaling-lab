@@ -29,7 +29,9 @@ WANDB_RUN_CONFIG = {
             0.10: ["p4lmf22i"],
         },
         "fornet_run_ids": {
-            1.00 : ["bdz7rm89"],  # in descending bg-range order ["0-100", "0-50", "0-25", "0-10"]
+            # key : dataset fraction (fg_range)
+            # value: list of ids with different bg_range in descending order ["0-100", "0-50", "0-25", "0-10"]
+            1.00 : ["bdz7rm89"],
             0.50 : ["tad9m3tt"],
             0.25 : ["5ndq2oce"],
             0.10 : ["giqxrx3p"],
