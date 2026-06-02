@@ -173,10 +173,7 @@ def save_run_data_to_db(run:Run, dataset:str):
         logger.info(f"Data of run {run.id} is already stored in database | Run name '{run.name}'")
 
 
-
-
-
-if __name__=="__main__":
+def build_database():
     load_dotenv()
     api = wandb.Api(api_key=os.getenv("WANDB_API_KEY"))
     entity = os.getenv("WANDB_ENTITY")
@@ -199,6 +196,11 @@ if __name__=="__main__":
                 check_ds_fraction_and_run_id_mapping(run, fraction)
                 validate_fornet_run(run, model)
                 save_run_data_to_db(run, run.config["dataset"])
-        logger.info(f"All '{model}' model model runs are processed.")
+        logger.success(f"All '{model}' model model runs are processed.")
+
+
+
+if __name__=="__main__":
+    build_database()
 
 
