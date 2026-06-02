@@ -31,10 +31,26 @@ WANDB_RUN_CONFIG = {
         "fornet_run_ids": {
             # key : dataset fraction (fg_range)
             # value: list of ids with different bg_range in descending order ["0-100", "0-50", "0-25", "0-10"]
-            1.00 : ["bdz7rm89"],
-            0.50 : ["tad9m3tt"],
-            0.25 : ["5ndq2oce"],
-            0.10 : ["giqxrx3p"],
+            1.00 : ["bdz7rm89", "37k5y5wt", "g50zkmfl", "o5jsrx8z"],
+            0.50 : ["ztp1d4go", "tad9m3tt", "9dnrukwp", "aggfcwxo"],
+            0.25 : ["41kt8ijm", "e83apfnv", "5ndq2oce", "w35da4yn"],
+            0.10 : ["i8w015s3", "gsrrhci9", "nshojpql", "giqxrx3p"],
+        },
+    },
+    "vit-s/32": {
+        "imagenet_run_ids": {
+            1.00: ["sefj86tp"],
+            0.50: ["rvpvlg79"],
+            0.25: ["x2vp97f9"],
+            0.10: ["znjol1kh"],
+        },
+        "fornet_run_ids": {
+            # key : dataset fraction (fg_range)
+            # value: list of ids with different bg_range in descending order ["0-100", "0-50", "0-25", "0-10"]
+            1.00: ["6kca8s1e", "8a37yvll", "9ex8msy3", "23c0dskh"],
+            0.50: ["28seu0s6", "m6z2z4zh", "8wbczxzc", "zsyslyse"],
+            0.25: ["gvphs0tz", "kx64opuq", "j2m7ubf7", "6i20wdfk"],
+            0.10: ["c9qiljuf", "uc1lodox", "6m8uo7ep", "llnetkcv"],
         },
     },
     # add vit-s/32, vit-b/16, vit-s/32, vit-b/28, etc.
@@ -47,8 +63,7 @@ EXPERIMENT_CONSTANTS = {
     "global_batch_size": 2048,
     "model_parameters":{
         "vit-s/16": 22_000_000,
-        "vit-s/32": 0,
-        "vit-b/16": 0,
+        "vit-s/32": 22_000_000,
     }
 }
 
