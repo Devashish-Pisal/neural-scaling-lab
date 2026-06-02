@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from configs.config import COLUMN_NAMES
 from configs.path_config import RAW_DATA_DIR
 from src.plotting import *
-from src.data_processing import get_imagenet_data, get_fornet_data, load_raw_file
+from src.data_processing import get_imagenet_data, get_fornet_data, load_raw_file, filter_data
 
 
 if __name__ == '__main__':
@@ -49,6 +49,7 @@ if __name__ == '__main__':
     plot_sample_efficiency_comparison(ds_samples, imgnet_top_5_acc, fornet_top_5_acc, "Top-5", 0.90)
     '''
 
+    '''
     scaling_exponents = [0.6, 0.8, 1.0]
     all_results = {}
     for exponent in scaling_exponents:
@@ -62,8 +63,7 @@ if __name__ == '__main__':
             "fornet": get_fornet_data(df, csv_config)
         }
     set_style()
-
-    '''
+ 
     plot_exponent_scaling_consistency(
         all_results,
         csv_config,
@@ -74,14 +74,14 @@ if __name__ == '__main__':
         csv_config,
         "ForNet"
     )
-    '''
+
 
     plot_exponent_fit_quality(
         all_results,
         csv_config
     )
 
-    '''
+
     plot_exponent_compute_efficiency(
         all_results,
         csv_config,
@@ -93,6 +93,8 @@ if __name__ == '__main__':
         "ForNet"
     )
     '''
+    print(filter_data("ViT-S/32", "fornet/all/cos", "0-50"))
+
 
 
 
