@@ -1,8 +1,10 @@
 
 import numpy as np
 import pandas as pd
+from pandas import DataFrame
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+from src.data_processing import filter_database
 from configs.path_config import IMG_OUTPUT_DIR, PDF_OUTPUTS_DIR
 
 
@@ -17,6 +19,14 @@ def set_style():
         'savefig.dpi': 300,
         'savefig.bbox': 'tight',
     })
+
+
+def calculate_fit(y_axis_values, x_axis_values):
+    log_y_values, log_x_values = np.log(y_axis_values), np.log(x_axis_values)
+    coefficients = np.polyfit(log_x_values, log_y_values, 1)
+    fit = np.exp(coefficients[1]) * x_axis_values ** coefficients[0]
+    return coefficients, fit
+
 
 
 def plot_steps_allocation(D, steps, ds_name, ref_exponent=0.8):
@@ -42,26 +52,50 @@ def plot_steps_allocation(D, steps, ds_name, ref_exponent=0.8):
 
 
 
-def plot_scaling_law(D, loss, ds_name):
+def plot_scaling_law(df:DataFrame):
+    datasets = df["train_dataset_name"].unique()
+    if len(datasets) != 1:
+        raise ValueError(f"Dataframe must contain data of only one dataset | Found {datasets}")
+    models = df["model_name"].unique()
+    dataset_name = None
+    if datasets[0] == "fornet/all/cos":
+        dataset_name = "ForNet"
+    elif datasets[0] == "fornet/all/1.0":
+        dataset_name = "ImageNet"
+    else:
+        raise ValueError(f"Unknown train_dataset_name in database | train_dataset_name: {datasets[0]}")
     fig, ax = plt.subplots(figsize=(6, 5))
-    ax.loglog(D, loss, 's-', color='C1', markersize=8, label='Validation loss')
-    # Power‑law fit
-    log_D, log_L = np.log(D), np.log(loss)
-    coeffs = np.polyfit(log_D, log_L, 1)
-    fit = np.exp(coeffs[1]) * D ** coeffs[0]
-    ax.loglog(D, fit, '--', color='gray', alpha=0.7,
-              label=f'Fit: $L \\propto D^{{{coeffs[0]:.2f}}}$')
-    ax = show_exact_values(ax, loss, "y")
-    ax = show_exact_values(ax, D, "x")
+    colors = plt.cm.viridis(np.linspace(0, 1, len(models)))
+    for i, model in enumerate(models):
+        filtered_df = filter_database(input_dataframe=df, model_name=model)
+        if datasets[0] == "fornet/all/cos":
+            filtered_df = filter_database(input_dataframe=filtered_df, bg_range="0-100")
+        assert len(filtered_df) == 4
+        filtered_df = filtered_df.sort_values("train_dataset_fraction", ascending=True)
+        D = filtered_df["train_dataset_fraction"]
+        loss = filtered_df["min_val_loss"]
+        line, = ax.loglog(D, loss, 'o-', color=colors[i], markersize=8, label=f"{model} val/loss")
+        # Power‑law fit
+        log_D, log_L = np.log(D), np.log(loss)
+        coeffs = np.polyfit(log_D, log_L, 1)
+        fit = np.exp(coeffs[1]) * D ** coeffs[0]
+        ax.loglog(D, fit, '--', color=line.get_color(), alpha=0.7,
+                  label=f'{model} Fit: $L \\propto D^{{{coeffs[0]:.2f}}}$')
+    if datasets[0] == "fornet/all/cos":
+        ax = show_exact_values(ax, filter_database(input_dataframe=df, bg_range="0-100")["min_val_loss"], "y")
+    else: # "fornet/all/1.0"
+        ax = show_exact_values(ax, df["min_val_loss"], "y")
+    ax = show_exact_values(ax, [0.10, 0.25, 0.50, 1.00], "x")
     ax.grid(True, which='major', ls='--', alpha=0.5)
-    ax.set_xlabel('Dataset size $D$')
+    ax.set_xlabel('Dataset fraction $D$')
     ax.set_ylabel('Validation loss $L$')
-    ax.set_title(f'{ds_name} Scaling Law: Loss vs Dataset Size')
+    ax.set_title(f'{dataset_name} Scaling Law: Loss vs Dataset Size')
     ax.legend()
     plt.tight_layout()
-    fig.savefig(PDF_OUTPUTS_DIR / f"{ds_name.lower()}_scaling_law.pdf")
-    fig.savefig(IMG_OUTPUT_DIR / f"{ds_name.lower()}_scaling_law.png")
+    fig.savefig(PDF_OUTPUTS_DIR / f"{dataset_name.lower()}_scaling_law.pdf")
+    fig.savefig(IMG_OUTPUT_DIR / f"{dataset_name.lower()}_scaling_law.png")
     plt.show()
+
 
 
 def plot_dataset_size_scaling_comparison(D, imgnet_loss, fornet_loss):
@@ -307,7 +341,7 @@ def show_exact_values(ax, values, axis:str):
         # X axis: exact dataset sizes
         ax.xaxis.set_major_locator(ticker.FixedLocator(values))
         ax.xaxis.set_major_formatter(
-            ticker.FuncFormatter(lambda x, _: f'{int(x):,}')
+            ticker.FuncFormatter(lambda x, _: f'{float(x):,}')
         )
         ax.xaxis.set_minor_locator(ticker.NullLocator())  # Remove any minor ticks (which often carry default labels)
     elif axis == "y":
