@@ -1,4 +1,4 @@
-
+import math
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
@@ -153,6 +153,64 @@ def plot_dataset_size_scaling_comparison(df):
     plt.tight_layout()
     fig.savefig(PDF_OUTPUTS_DIR /'dataset_scaling_comparison.pdf')
     fig.savefig(IMG_OUTPUT_DIR /'dataset_scaling_comparison.png')
+    plt.show()
+
+
+def plot_fg_bg_heatmaps(df:DataFrame):
+    df = df[(df["train_dataset_name"] == "fornet/all/cos")].copy()
+    models = sorted(df["model_name"].unique())
+    fg_order = [1.00, 0.50, 0.25, 0.10]
+    bg_order = [1.00, 0.50, 0.25, 0.10]
+    n_models = len(models)
+    ncols = min(3, n_models)
+    nrows = math.ceil(n_models / ncols)
+    fig, axes = plt.subplots(nrows, ncols, figsize=(8*ncols, 7*nrows))
+    axes = np.array(axes).reshape(-1)
+    vmin = df["max_val_acc1"].min()
+    vmax = df["max_val_acc1"].max()
+    for ax, model in zip(axes, models):
+        model_df = df[df["model_name"] == model]
+        model_df["fg_fraction"] = [float((int(item.split("-")[1])-int(item.split("-")[0]))/100) for item in model_df["fg_range"]]
+        model_df["bg_fraction"] = [float((int(item.split("-")[1])-int(item.split("-")[0]))/100) for item in model_df["bg_range"]]
+        heatmap = np.zeros((4, 4))
+        for i, fg in enumerate(fg_order):
+            for j, bg in enumerate(bg_order):
+                row = model_df[
+                    (model_df["fg_fraction"] == fg) &
+                    (model_df["bg_fraction"] == bg)
+                ]
+                if len(row) == 1:
+                    heatmap[i, j] = row["max_val_acc1"].iloc[0]
+                else:
+                    heatmap[i, j] = np.nan
+        im = ax.imshow(
+            heatmap,
+            cmap="viridis",
+            vmin=vmin,
+            vmax=vmax,
+            origin="upper",
+            aspect="auto"
+        )
+        for i in range(4):
+            for j in range(4):
+                value = heatmap[i, j]
+                if not np.isnan(value):
+                    ax.text(j,i,f"{value:.3f}",ha="center",va="center",color="white",fontsize=9,fontweight="bold")
+        ax.set_xticks(range(4))
+        ax.set_yticks(range(4))
+        ax.set_xticklabels(["0.10", "0.25", "0.50", "1.00"])
+        ax.set_yticklabels(["1.00", "0.50", "0.25", "0.10"])
+        ax.set_xlabel("Background Fraction")
+        ax.set_ylabel("Foreground Fraction")
+        ax.set_title(model)
+    for ax in axes[n_models:]:
+        ax.remove()
+    cbar = fig.colorbar(im,ax=fig.axes,shrink=0.85)
+    cbar.set_label("Top-1 Accuracy")
+    fig.subplots_adjust(right=0.75, wspace=0.3, hspace=0.3)
+    fig.suptitle("Foreground vs Background Heatmap",fontsize=14)
+    fig.savefig(PDF_OUTPUTS_DIR /"fg_bg_heatmaps.pdf")
+    fig.savefig(IMG_OUTPUT_DIR /"fg_bg_heatmaps.png")
     plt.show()
 
 
