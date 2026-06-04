@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from configs.config import COLUMN_NAMES
 from configs.path_config import RAW_DATA_DIR
 from src.plotting import *
-from src.data_processing import get_imagenet_data, get_fornet_data, load_raw_file, filter_data
+from src.data_processing import get_imagenet_data, get_fornet_data, load_raw_file, filter_database
 
 
 if __name__ == '__main__':
@@ -92,8 +92,17 @@ if __name__ == '__main__':
         csv_config,
         "ForNet"
     )
+   
+    imgnet_run = filter_database(train_dataset_name="fornet/all/1.0")
+    fornet_run = filter_database(train_dataset_name="fornet/all/cos")
+    plot_scaling_law(imgnet_run)
+    plot_scaling_law(fornet_run)
+     
+    plot_dataset_size_scaling_comparison(filter_database())
+
+    plot_fg_bg_heatmaps(filter_database())
     '''
-    print(filter_data("ViT-S/32", "fornet/all/cos", "0-50"))
+    plot_fornet_vs_imagenet_delta_gain(filter_database())
 
 
 
