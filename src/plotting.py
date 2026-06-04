@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from src.data_processing import filter_database
 from configs.path_config import IMG_OUTPUT_DIR, PDF_OUTPUTS_DIR
-
+from matplotlib.lines import Line2D
 
 def set_style():
     plt.style.use('seaborn-v0_8-whitegrid')
@@ -75,10 +75,13 @@ def plot_scaling_law(df:DataFrame):
         D = filtered_df["train_dataset_fraction"]
         loss = filtered_df["min_val_loss"]
         line, = ax.loglog(D, loss, 'o-', color=colors[i], markersize=8, label=f"{model} val/loss")
+        coeffs, fit = calculate_fit(loss, D)
+        '''
         # Power‑law fit
         log_D, log_L = np.log(D), np.log(loss)
         coeffs = np.polyfit(log_D, log_L, 1)
         fit = np.exp(coeffs[1]) * D ** coeffs[0]
+        '''
         ax.loglog(D, fit, '--', color=line.get_color(), alpha=0.7,
                   label=f'{model} Fit: $L \\propto D^{{{coeffs[0]:.2f}}}$')
     if datasets[0] == "fornet/all/cos":
@@ -97,36 +100,61 @@ def plot_scaling_law(df:DataFrame):
     plt.show()
 
 
-
-def plot_dataset_size_scaling_comparison(D, imgnet_loss, fornet_loss):
-    fig, ax = plt.subplots(figsize=(6, 5))
-    ax.loglog(D, imgnet_loss, 'o-', color='C3', markersize=8, label='ImageNet')
-    ax.loglog(D, fornet_loss, 's-', color='C4', markersize=8, label='ForNet')
-    # Power‑law fit for ImageNet
-    log_D_imgnet, log_L_imgnet = np.log(D), np.log(imgnet_loss)
-    coeffs_imgnet = np.polyfit(log_D_imgnet, log_L_imgnet, 1)
-    fit_imgnet = np.exp(coeffs_imgnet[1]) * D ** coeffs_imgnet[0]
-    ax.loglog(D, fit_imgnet, '--', color='orange', alpha=0.7,
-              label=f'ImageNet Fit: $L \\propto D^{{{coeffs_imgnet[0]:.2f}}}$')
-    # Power‑law fit for ForNet
-    log_D_fornet, log_L_fornet = np.log(D), np.log(fornet_loss)
-    coeffs_fornet = np.polyfit(log_D_fornet, log_L_fornet, 1)
-    fit_fornet = np.exp(coeffs_fornet[1]) * D ** coeffs_fornet[0]
-    ax.loglog(D, fit_fornet, '--', color='green', alpha=0.7,
-              label=f'ForNet Fit: $L \\propto D^{{{coeffs_fornet[0]:.2f}}}$')
-    all_loss_values =  pd.concat([imgnet_loss, fornet_loss], ignore_index=True)
-    ax = show_exact_values(ax, all_loss_values, "y")
-    ax = show_exact_values(ax, D, "x")
-    ax.set_xlabel('Dataset size $D$')
-    ax.set_ylabel('Validation loss $L$')
-    ax.set_title('Dataset Scaling Comparison: ImageNet vs ForNet')
-    ax.legend()
-    ax.grid(True, which='major', ls='--', alpha=0.5)
-    ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f'{x:,.0f}'))
+def plot_dataset_size_scaling_comparison(df):
+    df = df[df["bg_range"].isin(["0-100", None])].copy()
+    df["architecture"] = df["model_name"].str.split("/").str[0]
+    df["patch_size"] = df["model_name"].str.split("/").str[1]
+    architectures = sorted(df["architecture"].unique())
+    patch_colors = {
+        "16": "#1f77b4",  # Blue
+        "28": "#2ca02c",  # Green
+        "32": "#d62728"   # Red
+    }
+    datasets = {"fornet/all/1.0": ("ImageNet", "o"), "fornet/all/cos": ("ForNet", "s")}
+    fig, axes = plt.subplots(
+        1,
+        len(architectures),
+        figsize=(6 * len(architectures), 5),
+        sharey=True
+    )
+    if len(architectures) == 1:
+        axes = [axes]
+    for ax, arch in zip(axes, architectures):
+        arch_df = df[df["architecture"] == arch]
+        patch_sizes = sorted(
+            arch_df["patch_size"].unique(),
+            key=int
+        )
+        for patch in patch_sizes:
+            patch_df = arch_df[arch_df["patch_size"] == patch]
+            for dataset_name, (dataset_label, marker) in datasets.items():
+                current_df = patch_df[patch_df["train_dataset_name"] == dataset_name]
+                if current_df.empty:
+                    continue
+                current_df = current_df.sort_values("train_dataset_fraction")
+                D = current_df["train_dataset_fraction"]
+                L = current_df["min_val_loss"]
+                coeffs, fit = calculate_fit(L,D)
+                alpha = coeffs[0]
+                ax.loglog(D, L, marker=marker, linestyle='-', markersize=8,
+                    color=patch_colors.get(patch,"black"),
+                    label=f'P{patch} {dataset_label} ($\\alpha$={alpha:.2f})'
+                )
+                ax.loglog(D,fit,'--', alpha=0.6,
+                    color=patch_colors.get(patch,"black"),
+                )
+        show_exact_values(ax,[0.10, 0.25, 0.50, 1.00],"x")
+        ax.set_title(f'{arch}')
+        ax.set_xlabel('Dataset fraction $D$')
+        ax.grid(True,which='major',ls='--',alpha=0.5)
+        ax.legend(loc='best',fontsize=9,frameon=True)
+    axes[0].set_ylabel('Validation loss $L$')
+    fig.suptitle('Scaling Law Comparison',fontsize=16)
     plt.tight_layout()
-    fig.savefig(PDF_OUTPUTS_DIR / 'dataset_size_scaling_comparison.pdf')
-    fig.savefig(IMG_OUTPUT_DIR / 'dataset_size_scaling_comparison.png')
+    fig.savefig(PDF_OUTPUTS_DIR /'dataset_scaling_comparison.pdf')
+    fig.savefig(IMG_OUTPUT_DIR /'dataset_scaling_comparison.png')
     plt.show()
+
 
 
 def plot_flops_scaling_comparison(flops, imgnet_loss, fornet_loss):
@@ -352,3 +380,84 @@ def show_exact_values(ax, values, axis:str):
         )
         ax.yaxis.set_minor_locator(ticker.NullLocator())  # Remove any minor ticks (which often carry default labels)
     return ax
+
+
+
+def plot_dataset_size_scaling_comparison(df):
+    df = df[df["bg_range"].isin(["0-100", None])].copy()
+    df["architecture"] = df["model_name"].str.split("/").str[0]
+    df["patch_size"] = df["model_name"].str.split("/").str[1]
+    architectures = sorted(df["architecture"].unique())
+    patch_colors = {
+        "16": "#1f77b4",  # Blue
+        "28": "#2ca02c",  # Green
+        "32": "#d62728"   # Red
+    }
+    datasets = {
+        "fornet/all/1.0": ("ImageNet", "o"),
+        "fornet/all/cos": ("ForNet", "s")
+    }
+    fig, axes = plt.subplots(
+        1,
+        len(architectures),
+        figsize=(6 * len(architectures), 5),
+        sharey=True
+    )
+    if len(architectures) == 1:
+        axes = [axes]
+    for ax, arch in zip(axes, architectures):
+        arch_df = df[df["architecture"] == arch]
+        patch_sizes = sorted(
+            arch_df["patch_size"].unique(),
+            key=int
+        )
+        for patch in patch_sizes:
+            patch_df = arch_df[
+                arch_df["patch_size"] == patch
+            ]
+            for dataset_name, (dataset_label, marker) in datasets.items():
+                current_df = patch_df[patch_df["train_dataset_name"] == dataset_name]
+                if current_df.empty:
+                    continue
+                current_df = current_df.sort_values("train_dataset_fraction")
+                D = current_df["train_dataset_fraction"]
+                L = current_df["min_val_loss"]
+                coeffs, fit = calculate_fit(L,D)
+                alpha = coeffs[0]
+                ax.loglog(
+                    D,
+                    L,
+                    marker=marker,
+                    linestyle='-',
+                    color=patch_colors.get(
+                        patch,
+                        "black"
+                    ),
+                    markersize=8,
+                    label=(
+                        f'P{patch} '
+                        f'{dataset_label} '
+                        f'($\\alpha$={alpha:.2f})'
+                    )
+                )
+                ax.loglog(
+                    D,
+                    fit,
+                    '--',
+                    color=patch_colors.get(
+                        patch,
+                        "black"
+                    ),
+                    alpha=0.6
+                )
+        show_exact_values(ax,[0.10, 0.25, 0.50, 1.00],"x")
+        ax.set_title(f'{arch}')
+        ax.set_xlabel('Dataset fraction $D$')
+        ax.grid(True,which='major',ls='--',alpha=0.5)
+        ax.legend(loc='best',fontsize=9,frameon=True)
+    axes[0].set_ylabel('Validation loss $L$')
+    fig.suptitle('Scaling Law Comparison',fontsize=16)
+    plt.tight_layout()
+    fig.savefig(PDF_OUTPUTS_DIR /'dataset_scaling_comparison.pdf')
+    fig.savefig(IMG_OUTPUT_DIR /'dataset_scaling_comparison.png')
+    plt.show()
