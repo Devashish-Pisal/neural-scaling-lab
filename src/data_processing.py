@@ -26,9 +26,11 @@ def get_fornet_data(processed_data, csv_config):
 
 
 def filter_database(
-        run_id=None, run_name=None, model_name=None, train_dataset_name=None,
+        input_dataframe=None, run_id=None, run_name=None, model_name=None, train_dataset_name=None,
         train_dataset_fraction=None, fg_range=None, bg_range=None, total_epochs=None):
     database = pd.read_csv(MAIN_DATABASE_PATH)
+    if input_dataframe is not None:
+        database = input_dataframe
     if run_id is not None:
         database = database[database["run_id"] == run_id]
     if run_name is not None:
