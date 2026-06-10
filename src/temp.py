@@ -4,7 +4,7 @@ import numpy as np
 
 
 x = np.array([0.10, 0.25, 0.50, 1.00])
-y = np.array([149*62, 162*155, 183*311, 208*622])
+y = np.array([18.2, 11.0, 5.2, 2.4])
 
 
 logx = np.log10(x)
