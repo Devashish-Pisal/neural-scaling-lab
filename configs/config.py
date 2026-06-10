@@ -96,11 +96,14 @@ DB_COLUMNS = {
     "final_val_acc1": "Final val/acc1",
     "final_val_acc5": "Final val/acc5",
     "final_train_loss": "Final train/loss",
-    "total_runtime": "Runtime (in sec.)",
     "steps_per_epoch": "Steps per epoch",
     "total_steps": "Total steps",
     "flops_per_epoch": "FLOPs per epoch",
     "total_flops": "FLOPs",
+    "crossover_epoch_val_loss": "Crossover val/loss epoch",
+    "crossover_epoch_val_acc1": "Crossover val/acc1 epoch",
+    "crossover_epoch_val_acc5": "Crossover val/acc5 epoch",
+    "total_runtime": "Runtime (in sec.)",
     "gpu_partition": "GPU Partition"
 
     # Total 27 columns
