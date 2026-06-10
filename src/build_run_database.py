@@ -98,12 +98,12 @@ def contains_run_name_keywords(run_name:str, keywords:list[str]):
     return True
 
 
-def calculate_flops(model_name, total_steps):
+def calculate_flops_per_epoch(model_name, steps_per_epoch):
     model_param_count = EXPERIMENT_CONSTANTS["model_parameters"][model_name]
     model_name = model_name.split("/")
     assert len(model_name) == 2
-    patch_size = int(model_name[1])
-    return 6*model_param_count*((EXPERIMENT_CONSTANTS["dataset_image_resolution"]/patch_size) ** (2) + 1)*EXPERIMENT_CONSTANTS["global_batch_size"]*total_steps
+    # patch_size = int(model_name[1])
+    return 6 * model_param_count * EXPERIMENT_CONSTANTS["global_batch_size"] * steps_per_epoch
 
 
 def create_main_database():
@@ -162,7 +162,8 @@ def save_run_data_to_db(run:Run, dataset:str):
         row["total_runtime"] = perform_column_operation(history["_runtime"], "final")
         row["steps_per_epoch"] = int(row["fg_count"] / EXPERIMENT_CONSTANTS["global_batch_size"])
         row["total_steps"] = int(row["steps_per_epoch"] * config["epochs"])
-        row["total_flops"] = calculate_flops(config["model"].strip().lower(), row["total_steps"])
+        row["flops_per_epoch"] = calculate_flops_per_epoch(config["model"].strip().lower(), row["steps_per_epoch"])
+        row["total_flops"] = row["flops_per_epoch"] * row["total_epochs"]
         row["gpu_partition"] = metadata["gpu"]
 
         new_row = pd.DataFrame([row], columns=DB_COLUMNS.keys())
