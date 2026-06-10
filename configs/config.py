@@ -99,6 +99,7 @@ DB_COLUMNS = {
     "total_runtime": "Runtime (in sec.)",
     "steps_per_epoch": "Steps per epoch",
     "total_steps": "Total steps",
+    "flops_per_epoch": "FLOPs per epoch",
     "total_flops": "FLOPs",
     "gpu_partition": "GPU Partition"
 
