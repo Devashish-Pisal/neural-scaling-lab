@@ -100,7 +100,7 @@ def plot_scaling_law(df:DataFrame):
     plt.show()
 
 
-def plot_dataset_size_scaling_comparison(df):
+def plot_dataset_size_scaling_comparison(df:DataFrame):
     df = df[df["bg_range"].isin(["0-100", None])].copy()
     df["architecture"] = df["model_name"].str.split("/").str[0]
     df["patch_size"] = df["model_name"].str.split("/").str[1]
@@ -275,6 +275,80 @@ def plot_fornet_vs_imagenet_delta_gain(df: DataFrame) -> None:
     plt.tight_layout()
     plt.savefig(PDF_OUTPUTS_DIR / "fornet_vs_imagenet_delta_gain.pdf", dpi=150, bbox_inches='tight')
     plt.savefig(IMG_OUTPUT_DIR / "fornet_vs_imagenet_delta_gain.png", dpi=150, bbox_inches='tight')
+    plt.show()
+
+
+
+def plot_crossover_flops_scaling(df: DataFrame, crossover_metric: str = "val_loss"):
+    set_style()
+    # Crossover epochs are only defined relative to ForNet for ImageNet runs
+    crossover_col = f"crossover_epoch_{crossover_metric}"
+    if crossover_col not in df.columns:
+        raise ValueError(f"Crossover column '{crossover_col}' not found in database. "
+                         f"Available columns: {list(df.columns)}")
+    # Filter for ImageNet dataset where crossover epoch is valid (> 0)
+    filtered_df = df[
+        (df["train_dataset_name"] == "fornet/all/1.0") &
+        (df[crossover_col] > 0)
+    ].copy()
+    models = sorted(filtered_df["model_name"].unique())
+    n_models = len(models)
+    if n_models == 0:
+        raise ValueError(f"No runs with valid crossover epochs found in database for metric '{crossover_metric}'")
+    fig, axes = plt.subplots(
+        1,
+        n_models,
+        figsize=(6 * n_models, 5),
+        squeeze=False
+    )
+    axes = axes[0]  # Flatten to 1D array of axes
+    for i, model in enumerate(models):
+        ax = axes[i]
+        model_df = filtered_df[filtered_df["model_name"] == model].sort_values("train_dataset_size")
+        if model_df.empty:
+            continue
+        D = model_df["train_dataset_size"].values.astype(float)
+        crossover_epochs = model_df[crossover_col].values.astype(float)
+        flops_per_epoch = model_df["flops_per_epoch"].values.astype(float)
+        # Crossover FLOPs = Crossover Epoch * FLOPs per epoch
+        crossover_flops = crossover_epochs * flops_per_epoch
+        # Plot data points (markers only)
+        line, = ax.loglog(D, crossover_flops, 'o', color=f'C{i}', markersize=8, label='Crossover FLOPs data')
+        # Calculate fit
+        coeffs, fit = calculate_fit(crossover_flops, D)
+        b = coeffs[0]  # exponent
+        a = np.exp(coeffs[1])  # prefactor
+        # Calculate fit quality R^2 in log space
+        log_D = np.log(D)
+        log_crossover_flops = np.log(crossover_flops)
+        pred = coeffs[0] * log_D + coeffs[1]
+        ss_res = np.sum((log_crossover_flops - pred) ** 2)
+        ss_tot = np.sum((log_crossover_flops - np.mean(log_crossover_flops)) ** 2)
+        r2 = 1.0 - (ss_res / ss_tot)
+        # Plot power-law fit line
+        ax.loglog(D, fit, '--', color=line.get_color(), alpha=0.7,
+                  label=rf'Fit: $C_{{\text{{cross}}}} = {a:.2e} \cdot D^{{{b:.2f}}}$ ($R^2 = {r2:.4f}$)')
+        # Configure subplot
+        ax.set_title(f'{model}')
+        ax.set_xlabel('Training dataset samples $D$')
+        ax.grid(True, which='major', ls='--', alpha=0.5)
+        ax.legend(loc='best', frameon=True)
+        # Set exact x values as ticks
+        show_exact_values(ax, D, "x")
+        # Set exact y values corresponding to data points as ticks
+        ax.yaxis.set_major_locator(ticker.FixedLocator(crossover_flops))
+        ax.yaxis.set_major_formatter(
+            ticker.FuncFormatter(lambda y, _: f'{y:.2e}')
+        )
+        ax.yaxis.set_minor_locator(ticker.NullLocator())
+    axes[0].set_ylabel('Crossover FLOPs $C_{\\text{cross}}$')
+    fig.suptitle(f'Crossover FLOPs Scaling Law ({crossover_metric.replace("_", " ").title()})', fontsize=15, y=0.98)
+    plt.tight_layout()
+    # Save the plots
+    pdf_path = PDF_OUTPUTS_DIR / f'crossover_flops_{crossover_metric}_scaling.pdf'
+    png_path = IMG_OUTPUT_DIR / f'crossover_flops_{crossover_metric}_scaling.png'
+    fig.savefig(pdf_path)
+    fig.savefig(png_path)
     plt.show()
 
 
