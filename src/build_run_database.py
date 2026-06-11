@@ -159,11 +159,15 @@ def save_run_data_to_db(run:Run, dataset:str):
         row["final_val_acc1"] = perform_column_operation(history["val/acc1"], "final")
         row["final_val_acc5"] = perform_column_operation(history["val/acc5"], "final")
         row["final_train_loss"] = perform_column_operation(history["train/loss"], "final")
-        row["total_runtime"] = perform_column_operation(history["_runtime"], "final")
         row["steps_per_epoch"] = int(row["fg_count"] / EXPERIMENT_CONSTANTS["global_batch_size"])
         row["total_steps"] = int(row["steps_per_epoch"] * config["epochs"])
         row["flops_per_epoch"] = calculate_flops_per_epoch(config["model"].strip().lower(), row["steps_per_epoch"])
         row["total_flops"] = row["flops_per_epoch"] * row["total_epochs"]
+        # modify crossover values later, once all run for one model are finished
+        row["crossover_epoch_val_loss"] = -1
+        row["crossover_epoch_val_acc1"] = -1
+        row["crossover_epoch_val_acc5"] = -1
+        row["total_runtime"] = perform_column_operation(history["_runtime"], "final")
         row["gpu_partition"] = metadata["gpu"]
 
         new_row = pd.DataFrame([row], columns=DB_COLUMNS.keys())
@@ -172,6 +176,49 @@ def save_run_data_to_db(run:Run, dataset:str):
         logger.info(f"New row written to database | Row {row}")
     else:
         logger.info(f"Data of run {run.id} is already stored in database | Run name '{run.name}'")
+
+
+def find_crossover_point(imgnet_df:pd.DataFrame, fornet_df:pd.DataFrame, column_name):
+    assert not abs(len(imgnet_df) - len(fornet_df)) > 1
+    if column_name == "val/loss":
+        comparision = imgnet_df["val/loss"] > fornet_df["val/loss"]
+        idx = comparision.idxmax()
+        return imgnet_df.iloc[idx]["epoch"]
+    elif column_name == "val/acc1":
+        comparision = imgnet_df["val/acc1"] < fornet_df["val/acc1"]
+        idx = comparision.idxmax()
+        return imgnet_df.iloc[idx]["epoch"]
+    elif column_name == "val/acc5":
+        comparision = imgnet_df["val/acc5"] < fornet_df["val/acc5"]
+        idx = comparision.idxmax()
+        return imgnet_df.iloc[idx]["epoch"]
+    else:
+        raise ValueError(f"Wrong column name {column_name} provided")
+
+
+
+def find_crossover_epochs(imgnet_runs_dict:dict, fornet_runs_dict:dict, api, entity, project_name):
+    assert len(imgnet_runs_dict) == 4 == len(fornet_runs_dict)
+    database_df = pd.read_csv(MAIN_DATABASE_PATH, keep_default_na=False)
+    for fraction, imgnet_run_id in imgnet_runs_dict.items():
+        # only consider fornet run which has bg_range = '0-100'
+        fornet_run_id = fornet_runs_dict[fraction][0]
+        imgnet_run = api.run(f"{entity}/{project_name}/{imgnet_run_id[0]}")
+        fornet_run = api.run(f"{entity}/{project_name}/{fornet_run_id}")
+        imgnet_config = imgnet_run.config
+        fornet_config = fornet_run.config
+        assert fornet_config["dataset"] == "fornet/all/cos" and fornet_config["bg_range"] == "0-100"
+        assert imgnet_config["dataset"] == "fornet/all/1.0" and imgnet_config["bg_range"] is None
+        assert imgnet_config["fg_range"] == fornet_config["fg_range"]
+
+        imgnet_run_history = pd.DataFrame(imgnet_run.scan_history())
+        fornet_run_history = pd.DataFrame(fornet_run.scan_history())
+        database_df.loc[database_df["run_id"] == imgnet_run_id[0], "crossover_epoch_val_loss"] = find_crossover_point(imgnet_run_history, fornet_run_history, "val/loss")
+        database_df.loc[database_df["run_id"] == imgnet_run_id[0], "crossover_epoch_val_acc1"] = find_crossover_point(imgnet_run_history, fornet_run_history, "val/acc1")
+        database_df.loc[database_df["run_id"] == imgnet_run_id[0], "crossover_epoch_val_acc5"] = find_crossover_point(imgnet_run_history, fornet_run_history, "val/acc5")
+    database_df.to_csv(MAIN_DATABASE_PATH, index=False)
+
+
 
 
 def build_database():
@@ -197,6 +244,7 @@ def build_database():
                 check_ds_fraction_and_run_id_mapping(run, fraction)
                 validate_fornet_run(run, model)
                 save_run_data_to_db(run, run.config["dataset"])
+        find_crossover_epochs(imgnet_runs_dict, fornet_runs_dict, api, entity, project_name)
         logger.success(f"All '{model}' model model runs are processed.")
 
 
