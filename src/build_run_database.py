@@ -162,6 +162,8 @@ def save_run_data_to_db(run:Run, dataset:str):
         row["steps_per_epoch"] = int(row["fg_count"] / EXPERIMENT_CONSTANTS["global_batch_size"])
         row["total_steps"] = int(row["steps_per_epoch"] * config["epochs"])
         row["flops_per_epoch"] = calculate_flops_per_epoch(config["model"].strip().lower(), row["steps_per_epoch"])
+        # Formula 1 for total_flops: C = 6 * N * (total_steps * batch_size)
+        # Formula 2 for total_flops: C = 6 * N * (train_dataset_size * epochs)
         row["total_flops"] = row["flops_per_epoch"] * row["total_epochs"]
         # modify crossover values later, once all run for one model are finished
         row["crossover_epoch_val_loss"] = -1
@@ -177,24 +179,52 @@ def save_run_data_to_db(run:Run, dataset:str):
     else:
         logger.info(f"Data of run {run.id} is already stored in database | Run name '{run.name}'")
 
-
+'''
 def find_crossover_point(imgnet_df:pd.DataFrame, fornet_df:pd.DataFrame, column_name):
-    assert not abs(len(imgnet_df) - len(fornet_df)) > 1
+    # Filter out NaNs and duplicates for epoch and the target column
+    imgnet_val = imgnet_df[["epoch", column_name]].dropna().drop_duplicates(subset=["epoch"])
+    fornet_val = fornet_df[["epoch", column_name]].dropna().drop_duplicates(subset=["epoch"])
+    
+    # Merge on epoch to align them
+    merged = pd.merge(imgnet_val, fornet_val, on="epoch", suffixes=("_imgnet", "_fornet"))
+    merged = merged.sort_values("epoch").reset_index(drop=True)
+    
+    if merged.empty:
+        return -1
+        
     if column_name == "val/loss":
-        comparision = imgnet_df["val/loss"] > fornet_df["val/loss"]
-        idx = comparision.idxmax()
-        return imgnet_df.iloc[idx]["epoch"]
-    elif column_name == "val/acc1":
-        comparision = imgnet_df["val/acc1"] < fornet_df["val/acc1"]
-        idx = comparision.idxmax()
-        return imgnet_df.iloc[idx]["epoch"]
-    elif column_name == "val/acc5":
-        comparision = imgnet_df["val/acc5"] < fornet_df["val/acc5"]
-        idx = comparision.idxmax()
-        return imgnet_df.iloc[idx]["epoch"]
+        comparison = merged[f"{column_name}_imgnet"] > merged[f"{column_name}_fornet"]
+    elif column_name in ("val/acc1", "val/acc5"):
+        comparison = merged[f"{column_name}_imgnet"] < merged[f"{column_name}_fornet"]
     else:
         raise ValueError(f"Wrong column name {column_name} provided")
+        
+    if not comparison.any():
+        return -1
+        
+    first_true_idx = comparison.idxmax()
+    return int(merged.loc[first_true_idx, "epoch"])
+'''
 
+def find_crossover_point(imgnet_df: pd.DataFrame, fornet_df: pd.DataFrame, column_name):
+        # Filter out NaNs and duplicates for epoch and the target column
+        imgnet_val = imgnet_df[["epoch", column_name]].dropna().drop_duplicates(subset=["epoch"])
+        fornet_val = fornet_df[["epoch", column_name]].dropna().drop_duplicates(subset=["epoch"])
+        # Merge on epoch to align them
+        merged = pd.merge(imgnet_val, fornet_val, on="epoch", suffixes=("_imgnet", "_fornet"))
+        merged = merged.sort_values("epoch").reset_index(drop=True)
+        if merged.empty:
+            return -1
+        if column_name == "val/loss":
+            comparison = merged[f"{column_name}_imgnet"] > merged[f"{column_name}_fornet"]
+        elif column_name in ("val/acc1", "val/acc5"):
+            comparison = merged[f"{column_name}_imgnet"] < merged[f"{column_name}_fornet"]
+        else:
+            raise ValueError(f"Wrong column name {column_name} provided")
+        if not comparison.any():
+            return -1
+        first_true_idx = comparison.idxmax()
+        return int(merged.loc[first_true_idx, "epoch"])
 
 
 def find_crossover_epochs(imgnet_runs_dict:dict, fornet_runs_dict:dict, api, entity, project_name):
