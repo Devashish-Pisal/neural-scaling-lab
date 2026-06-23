@@ -80,6 +80,7 @@ EXPERIMENT_CONSTANTS = {
     "model_parameters":{
         "vit-s/16": 22_000_000,
         "vit-s/32": 22_000_000,
+        "vit-ti/16": 5_700_000,
     }
 }
 
