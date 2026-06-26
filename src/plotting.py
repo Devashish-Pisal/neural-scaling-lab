@@ -4,6 +4,7 @@ import pandas as pd
 from pandas import DataFrame
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+from matplotlib.ticker import FuncFormatter
 from src.data_processing import filter_database
 from configs.path_config import IMG_OUTPUT_DIR, PDF_OUTPUTS_DIR
 from matplotlib.lines import Line2D
@@ -238,10 +239,14 @@ def plot_fg_bg_heatmaps(df:DataFrame):
 def plot_fornet_vs_imagenet_delta_gain(df: DataFrame) -> None:
     data = df.copy()
     data['bg_range'] = data['bg_range'].fillna('null').astype(str).str.lower()
-    imagenet = data[(data['train_dataset_name'] == 'fornet/all/1.0') &
-                    (data['bg_range'] == 'null')].copy()
-    fornet_bg100 = data[(data['train_dataset_name'] == 'fornet/all/cos') &
-                        (data['bg_range'] == '0-100')].copy()
+    imagenet = data[
+        (data['train_dataset_name'] == 'fornet/all/1.0') &
+        (data['bg_range'] == 'null')
+    ].copy()
+    fornet_bg100 = data[
+        (data['train_dataset_name'] == 'fornet/all/cos') &
+        (data['bg_range'] == '0-100')
+    ].copy()
     if imagenet.empty or fornet_bg100.empty:
         raise ValueError("Missing required runs: ImageNet or ForNet (bg=0-100) not found.")
     models_imagenet = set(imagenet['model_name'].unique())
@@ -249,11 +254,33 @@ def plot_fornet_vs_imagenet_delta_gain(df: DataFrame) -> None:
     models = sorted(models_imagenet.intersection(models_fornet))
     if not models:
         raise ValueError("No matching model names between ImageNet and ForNet runs.")
+    fractions = [0.1, 0.25, 0.5, 1.0]
+
+    # Compute global y-axis limits across all models
+    all_deltas = []
+    for model in models:
+        img_df = imagenet[imagenet['model_name'] == model]
+        img_acc = img_df.set_index('train_dataset_fraction')['max_val_acc1'].to_dict()
+        fornet_df = fornet_bg100[fornet_bg100['model_name'] == model]
+        fornet_acc = fornet_df.set_index('train_dataset_fraction')['max_val_acc1'].to_dict()
+        for frac in fractions:
+            if frac in img_acc and frac in fornet_acc:
+                all_deltas.append(fornet_acc[frac] - img_acc[frac])
+    if not all_deltas:
+        raise ValueError("No valid delta values found.")
+    padding = max(0.02, 0.1 * (max(all_deltas) - min(all_deltas)))
+    global_ymin = min(0, min(all_deltas)) - padding
+    global_ymax = max(all_deltas) + padding
+
     n_models = len(models)
-    fig, axes = plt.subplots(1, n_models, figsize=(16, 8), sharey=True)
+    fig, axes = plt.subplots(
+        1,
+        n_models,
+        figsize=(16, 8),
+        sharey=True
+    )
     if n_models == 1:
         axes = [axes]
-    fractions = sorted([0.1, 0.25, 0.5, 1.0])
     for ax, model in zip(axes, models):
         img_df = imagenet[imagenet['model_name'] == model]
         img_acc = img_df.set_index('train_dataset_fraction')['max_val_acc1'].to_dict()
@@ -263,41 +290,68 @@ def plot_fornet_vs_imagenet_delta_gain(df: DataFrame) -> None:
         valid_fracs = []
         for frac in fractions:
             if frac in img_acc and frac in fornet_acc:
-                delta = fornet_acc[frac] - img_acc[frac]
-                deltas.append(delta)
+                deltas.append(fornet_acc[frac] - img_acc[frac])
                 valid_fracs.append(frac)
             else:
-                print(f"Warning: Model {model} missing fraction {frac} in either ImageNet or ForNet.")
+                print(
+                    f"Warning: Model {model} missing fraction {frac} "
+                    "in either ImageNet or ForNet."
+                )
         if not deltas:
             print(f"Warning: No valid fractions for model {model}. Skipping.")
             ax.set_visible(False)
             continue
         x_pos = np.arange(len(valid_fracs))
-        bar_colors = ['green' if d >= 0 else 'red' for d in deltas]
-        bars = ax.bar(x_pos, deltas, width=0.6, color=bar_colors, edgecolor='black')
+        colors = ["green" if d >= 0 else "red" for d in deltas]
+        bars = ax.bar(
+            x_pos,
+            deltas,
+            width=0.6,
+            color=colors,
+            edgecolor="black"
+        )
         for bar, val in zip(bars, deltas):
-            if val > 0:
-                label = f'+{val:.3f}'
-            else:
-                label = f'{val:.3f}'
-            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.002,
-                    label, ha='center', va='bottom', fontsize=9,
-                    color='darkgreen' if val > 0 else 'darkred')
-        ax.axhline(y=0, color='black', linestyle='--', linewidth=1.5, alpha=0.7)
-        ax.set_xlabel('Training dataset fraction', fontsize=10)
-        ax.set_ylabel("Δacc1 (ForNet(bg=1.0) − ImageNet)", fontsize=10)
-        ax.set_title(f'{model}', fontsize=12)
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                val + 0.002 if val >= 0 else val - 0.002,
+                f"{val * 100:+.2f}%",
+                ha="center",
+                va="bottom" if val >= 0 else "top",
+                fontsize=9,
+                color="darkgreen" if val >= 0 else "darkred",
+            )
+        ax.axhline(
+            y=0,
+            color="black",
+            linestyle="--",
+            linewidth=1.5,
+            alpha=0.7,
+        )
+        ax.set_xlabel("Training dataset fraction", fontsize=10)
+        ax.set_title(model, fontsize=12)
         ax.set_xticks(x_pos)
         ax.set_xticklabels([str(f) for f in valid_fracs])
-        ax.grid(axis='y', linestyle=':', alpha=0.6)
-        y_min = min(0, min(deltas)) - 0.02
-        y_max = max(deltas) + 0.02
-        ax.set_ylim(y_min, y_max)
+        ax.grid(axis="y", linestyle=":", alpha=0.6)
+        ax.set_ylim(global_ymin, global_ymax)
+        ax.yaxis.set_major_formatter(
+            FuncFormatter(lambda y, _: f"{y * 100:.0f}%")
+        )
+    axes[0].set_ylabel(
+        "Δacc1 (ForNet(bg=0-100) − ImageNet)",
+        fontsize=10,
+    )
     plt.tight_layout()
-    plt.savefig(PDF_OUTPUTS_DIR / "fornet_vs_imagenet_delta_gain.pdf", dpi=150, bbox_inches='tight')
-    plt.savefig(IMG_OUTPUT_DIR / "fornet_vs_imagenet_delta_gain.png", dpi=150, bbox_inches='tight')
+    plt.savefig(
+        PDF_OUTPUTS_DIR / "fornet_vs_imagenet_delta_gain.pdf",
+        dpi=150,
+        bbox_inches="tight",
+    )
+    plt.savefig(
+        IMG_OUTPUT_DIR / "fornet_vs_imagenet_delta_gain.png",
+        dpi=150,
+        bbox_inches="tight",
+    )
     plt.show()
-
 
 
 def plot_crossover_flops_scaling(df: DataFrame, crossover_metric: str = "val_loss"):
