@@ -250,7 +250,7 @@ def plot_fornet_vs_imagenet_delta_gain(df: DataFrame) -> None:
     if not models:
         raise ValueError("No matching model names between ImageNet and ForNet runs.")
     n_models = len(models)
-    fig, axes = plt.subplots(1, n_models, figsize=(10, 5), sharey=True)
+    fig, axes = plt.subplots(1, n_models, figsize=(16, 8), sharey=True)
     if n_models == 1:
         axes = [axes]
     fractions = sorted([0.1, 0.25, 0.5, 1.0])
