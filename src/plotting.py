@@ -149,7 +149,7 @@ def plot_dataset_size_scaling_comparison(df: DataFrame):
                 # DATA POINTS
                 ax.scatter(D,L,s=70,marker=marker,color=color,edgecolor="white",linewidth=0.8,alpha=0.95,zorder=3,)
                 # FITTED LAW
-                ax.loglog(D,fit,"--",lw=2.5,color=color,alpha=0.85,
+                ax.loglog(D,fit,"--",lw=1.5,color=color,alpha=0.85,
                     label=(
                         rf"P{patch} {dataset_label}: "
                         rf"$L={a:.2e}D^{{{alpha:.2f}}}$ "
