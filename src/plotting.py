@@ -64,7 +64,7 @@ def plot_scaling_law(df:DataFrame):
         dataset_name = "ImageNet"
     else:
         raise ValueError(f"Unknown train_dataset_name in database | train_dataset_name: {datasets[0]}")
-    fig, ax = plt.subplots(figsize=(6, 5))
+    fig, ax = plt.subplots(figsize=(15, 10))
     colors = plt.cm.viridis(np.linspace(0, 1, len(models)))
     for i, model in enumerate(models):
         filtered_df = filter_database(input_dataframe=df, model_name=model)
