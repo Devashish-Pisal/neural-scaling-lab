@@ -187,8 +187,8 @@ def plot_fg_bg_heatmaps(df:DataFrame):
     nrows = math.ceil(n_models / ncols)
     fig, axes = plt.subplots(nrows, ncols, figsize=(8*ncols, 7*nrows))
     axes = np.array(axes).reshape(-1)
-    vmin = df["max_val_acc1"].min()
-    vmax = df["max_val_acc1"].max()
+    vmin = df["max_val_acc1"].min() * 100
+    vmax = df["max_val_acc1"].max() * 100
     for ax, model in zip(axes, models):
         model_df = df[df["model_name"] == model]
         model_df["fg_fraction"] = [float((int(item.split("-")[1])-int(item.split("-")[0]))/100) for item in model_df["fg_range"]]
@@ -201,7 +201,7 @@ def plot_fg_bg_heatmaps(df:DataFrame):
                     (model_df["bg_fraction"] == bg)
                 ]
                 if len(row) == 1:
-                    heatmap[i, j] = row["max_val_acc1"].iloc[0]
+                    heatmap[i, j] = row["max_val_acc1"].iloc[0] * 100
                 else:
                     heatmap[i, j] = np.nan
         im = ax.imshow(
@@ -216,7 +216,7 @@ def plot_fg_bg_heatmaps(df:DataFrame):
             for j in range(4):
                 value = heatmap[i, j]
                 if not np.isnan(value):
-                    ax.text(j,i,f"{value:.3f}",ha="center",va="center",color="white",fontsize=9,fontweight="bold")
+                    ax.text(j,i,f"{value:.2f}",ha="center",va="center",color="white",fontsize=9,fontweight="bold")
         ax.set_xticks(range(4))
         ax.set_yticks(range(4))
         ax.set_xticklabels(["0.10", "0.25", "0.50", "1.00"])
@@ -227,7 +227,7 @@ def plot_fg_bg_heatmaps(df:DataFrame):
     for ax in axes[n_models:]:
         ax.remove()
     cbar = fig.colorbar(im,ax=fig.axes,shrink=0.85)
-    cbar.set_label("Top-1 Accuracy")
+    cbar.set_label("Top-1 Accuracy (%)")
     fig.subplots_adjust(right=0.75, wspace=0.3, hspace=0.3)
     fig.suptitle("Foreground vs Background Heatmap",fontsize=14)
     fig.savefig(PDF_OUTPUTS_DIR /"fg_bg_heatmaps.pdf")
