@@ -101,6 +101,80 @@ def plot_scaling_law(df:DataFrame):
     plt.show()
 
 
+
+def plot_dataset_size_scaling_comparison(df: DataFrame):
+    set_style()
+
+    df = df[df["bg_range"].isin(["0-100", None])].copy()
+    df["architecture"] = df["model_name"].str.split("/").str[0]
+    df["patch_size"] = df["model_name"].str.split("/").str[1]
+
+    architectures = sorted(df["architecture"].unique())
+
+    patch_colors = {"16": "#1f77b4", "28": "#2ca02c", "32": "#d62728"}
+    datasets = {
+        "fornet/all/1.0": ("ImageNet", "o"),
+        "fornet/all/cos": ("ForNet", "s"),
+    }
+
+    ncols = 3
+    nrows = math.ceil(len(architectures) / ncols)
+    fig, axes = plt.subplots(
+        nrows,
+        ncols,
+        figsize=(8 * ncols, 6 * nrows),
+        sharey=True,
+    )
+    axes = np.atleast_1d(axes).ravel()
+    for ax, arch in zip(axes, architectures):
+        arch_df = df[df["architecture"] == arch]
+        for patch in sorted(arch_df["patch_size"].unique(), key=int):
+            patch_df = arch_df[arch_df["patch_size"] == patch]
+            color = patch_colors.get(patch, "black")
+            for dataset_name, (dataset_label, marker) in datasets.items():
+                current_df = patch_df[patch_df["train_dataset_name"] == dataset_name]
+                if len(current_df) < 2:
+                    continue
+                current_df = current_df.sort_values("train_dataset_fraction")
+                D = current_df["train_dataset_fraction"].to_numpy(float)
+                L = current_df["min_val_loss"].to_numpy(float)
+                coeffs, fit = calculate_fit(L, D)
+                alpha, a = coeffs[0], np.exp(coeffs[1])
+                pred = coeffs[0] * np.log(D) + coeffs[1]
+                r2 = 1 - np.sum((np.log(L) - pred) ** 2) / np.sum((np.log(L) - np.mean(np.log(L))) ** 2)
+                ax.scatter(
+                    D, L, s=70, marker=marker, color=color,
+                    edgecolor="white", linewidth=0.8, zorder=3
+                )
+                ax.loglog(
+                    D, fit, "--", color=color, lw=1.5,
+                    label=rf"P{patch} {dataset_label}: $L={a:.2e}D^{{{alpha:.2f}}}$ ($R^2={r2:.3f}$)"
+                )
+        ax.set_title(arch, fontsize=13, fontweight="bold")
+        ax.set_xlabel("Dataset fraction $D$")
+        ax.grid(True, which="major", ls="--", alpha=0.35)
+        ax.grid(True, which="minor", ls=":", alpha=0.15)
+        show_exact_values(ax, [0.10, 0.25, 0.50, 1.00], "x")
+        handles, labels = ax.get_legend_handles_labels()
+        handles += [
+            Line2D([], [], marker="o", color="black", ls="", markersize=7),
+            Line2D([], [], marker="s", color="black", ls="", markersize=7),
+        ]
+        labels += ["ImageNet", "ForNet"]
+        ax.legend(handles, labels, fontsize=8, loc="best", framealpha=0.95)
+    for ax in axes[len(architectures):]:
+        fig.delaxes(ax)
+    for ax in axes[::ncols]:
+        if ax in fig.axes:
+            ax.set_ylabel("Validation loss $L$")
+    fig.suptitle("Dataset Scaling Laws", fontsize=16, fontweight="bold")
+    fig.tight_layout()
+    fig.savefig(PDF_OUTPUTS_DIR / "dataset_scaling_comparison.pdf")
+    fig.savefig(IMG_OUTPUT_DIR / "dataset_scaling_comparison.png")
+    plt.show()
+
+
+'''
 def plot_dataset_size_scaling_comparison(df: DataFrame):
     set_style()
     df = df[df["bg_range"].isin(["0-100", None])].copy()
@@ -176,7 +250,7 @@ def plot_dataset_size_scaling_comparison(df: DataFrame):
     fig.savefig(PDF_OUTPUTS_DIR / "dataset_scaling_comparison.pdf")
     fig.savefig(IMG_OUTPUT_DIR / "dataset_scaling_comparison.png")
     plt.show()
-
+'''
 
 def plot_fg_bg_heatmaps(df:DataFrame):
     df = df[(df["train_dataset_name"] == "fornet/all/cos")].copy()
