@@ -312,6 +312,88 @@ def plot_fg_bg_heatmaps(df:DataFrame):
 
 def plot_fornet_vs_imagenet_delta_gain(df: DataFrame) -> None:
     data = df.copy()
+    data["bg_range"] = data["bg_range"].fillna("null").astype(str).str.lower()
+    imagenet = data[
+        (data["train_dataset_name"] == "fornet/all/1.0") &
+        (data["bg_range"] == "null")
+    ]
+    fornet = data[
+        (data["train_dataset_name"] == "fornet/all/cos") &
+        (data["bg_range"] == "0-100")
+    ]
+    if imagenet.empty or fornet.empty:
+        raise ValueError("Missing ImageNet or ForNet runs.")
+    models = sorted(
+        set(imagenet["model_name"]).intersection(fornet["model_name"])
+    )
+    if not models:
+        raise ValueError("No matching models found.")
+    fractions = [0.1, 0.25, 0.5, 1.0]
+    # Global y-limits
+    all_deltas = []
+    for model in models:
+        img = imagenet[imagenet.model_name == model].set_index("train_dataset_fraction")["max_val_acc1"]
+        fn = fornet[fornet.model_name == model].set_index("train_dataset_fraction")["max_val_acc1"]
+        all_deltas += [fn[f] - img[f] for f in fractions if f in img and f in fn]
+    if not all_deltas:
+        raise ValueError("No valid delta values found.")
+    pad = max(0.02, 0.1 * (max(all_deltas) - min(all_deltas)))
+    ymin = min(0, min(all_deltas)) - pad
+    ymax = max(all_deltas) + pad
+    ncols = 3
+    nrows = math.ceil(len(models) / ncols)
+    fig, axes = plt.subplots(
+        nrows,
+        ncols,
+        figsize=(6 * ncols, 5 * nrows),
+        sharey=True,
+    )
+    axes = np.atleast_1d(axes).ravel()
+    for ax, model in zip(axes, models):
+        img = imagenet[imagenet.model_name == model].set_index("train_dataset_fraction")["max_val_acc1"]
+        fn = fornet[fornet.model_name == model].set_index("train_dataset_fraction")["max_val_acc1"]
+        valid = [f for f in fractions if f in img and f in fn]
+        deltas = [fn[f] - img[f] for f in valid]
+        x = np.arange(len(valid))
+        bars = ax.bar(
+            x,
+            deltas,
+            color=["green" if d >= 0 else "red" for d in deltas],
+            edgecolor="black",
+            width=0.6,
+        )
+        for bar, d in zip(bars, deltas):
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                d + 0.002 if d >= 0 else d - 0.002,
+                f"{d * 100:+.2f}%",
+                ha="center",
+                va="bottom" if d >= 0 else "top",
+                fontsize=9,
+            )
+        ax.axhline(0, color="black", ls="--", lw=1.2)
+        ax.set_title(model)
+        ax.set_xlabel("Training dataset fraction")
+        ax.set_xticks(x)
+        ax.set_xticklabels(valid)
+        ax.set_ylim(ymin, ymax)
+        ax.grid(axis="y", ls=":", alpha=0.6)
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda y, _: f"{100*y:.0f}%"))
+    for ax in axes[len(models):]:
+        fig.delaxes(ax)
+    for ax in axes[::ncols]:
+        if ax in fig.axes:
+            ax.set_ylabel("Δacc1 [ForNet(bg=1.0) − ImageNet]")
+    fig.tight_layout()
+    fig.savefig(PDF_OUTPUTS_DIR / "fornet_vs_imagenet_delta_gain.pdf", dpi=150)
+    fig.savefig(IMG_OUTPUT_DIR / "fornet_vs_imagenet_delta_gain.png", dpi=150)
+    plt.show()
+
+
+
+'''
+def plot_fornet_vs_imagenet_delta_gain(df: DataFrame) -> None:
+    data = df.copy()
     data['bg_range'] = data['bg_range'].fillna('null').astype(str).str.lower()
     imagenet = data[
         (data['train_dataset_name'] == 'fornet/all/1.0') &
@@ -426,7 +508,7 @@ def plot_fornet_vs_imagenet_delta_gain(df: DataFrame) -> None:
         bbox_inches="tight",
     )
     plt.show()
-
+'''
 
 def plot_crossover_flops_scaling(df: DataFrame, crossover_metric: str = "val_loss"):
     set_style()
