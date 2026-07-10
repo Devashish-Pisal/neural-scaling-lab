@@ -69,6 +69,22 @@ WANDB_RUN_CONFIG = {
             0.10: ["jxhfqu0o", "4jcnfqct", "mxo04qqe", "66xvvxq5"],
         },
     },
+    "vit-b/16": {
+        "imagenet_run_ids": {
+            1.00: ["clm520y2"],
+            0.50: ["nsbmttiq"],
+            0.25: ["g5k2agtt"],
+            0.10: ["pksgtthn"],
+        },
+        "fornet_run_ids": {
+            # key : dataset fraction (fg_range)
+            # value: list of ids with different bg_range in descending order ["0-100", "0-50", "0-25", "0-10"]
+            1.00: ["v9l4gigx", "02nd637f", "m1ikhd20", "gtm0m4sa"],
+            0.50: ["so20x9ri", "dlvjqdb3", "pnx3dj8y", "4aq2b6yp"],
+            0.25: ["978sjuch", "ykg1mkgu", "fj3zrxk3", "niyyfist"],
+            0.10: ["dug2gz7a", "pagtn2eb", "0jxr740c", "e7kasssf"],
+        },
+    },
     # add vit-s/32, vit-b/16, vit-s/32, vit-b/28, etc.
 }
 
