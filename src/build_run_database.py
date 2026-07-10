@@ -179,32 +179,6 @@ def save_run_data_to_db(run:Run, dataset:str):
     else:
         logger.info(f"Data of run {run.id} is already stored in database | Run name '{run.name}'")
 
-'''
-def find_crossover_point(imgnet_df:pd.DataFrame, fornet_df:pd.DataFrame, column_name):
-    # Filter out NaNs and duplicates for epoch and the target column
-    imgnet_val = imgnet_df[["epoch", column_name]].dropna().drop_duplicates(subset=["epoch"])
-    fornet_val = fornet_df[["epoch", column_name]].dropna().drop_duplicates(subset=["epoch"])
-    
-    # Merge on epoch to align them
-    merged = pd.merge(imgnet_val, fornet_val, on="epoch", suffixes=("_imgnet", "_fornet"))
-    merged = merged.sort_values("epoch").reset_index(drop=True)
-    
-    if merged.empty:
-        return -1
-        
-    if column_name == "val/loss":
-        comparison = merged[f"{column_name}_imgnet"] > merged[f"{column_name}_fornet"]
-    elif column_name in ("val/acc1", "val/acc5"):
-        comparison = merged[f"{column_name}_imgnet"] < merged[f"{column_name}_fornet"]
-    else:
-        raise ValueError(f"Wrong column name {column_name} provided")
-        
-    if not comparison.any():
-        return -1
-        
-    first_true_idx = comparison.idxmax()
-    return int(merged.loc[first_true_idx, "epoch"])
-'''
 
 def find_crossover_point(imgnet_df: pd.DataFrame, fornet_df: pd.DataFrame, column_name):
         # Filter out NaNs and duplicates for epoch and the target column
