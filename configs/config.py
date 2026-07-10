@@ -94,9 +94,10 @@ EXPERIMENT_CONSTANTS = {
     "dataset_image_resolution": 224, # (224 x 224) px image resolution of ImageNet-1k dataset samples
     "global_batch_size": 2048,
     "model_parameters":{
+        "vit-ti/16": 5_700_000,
         "vit-s/16": 22_000_000,
         "vit-s/32": 22_000_000,
-        "vit-ti/16": 5_700_000,
+        "vit-b/16": 86_000_000,
     }
 }
 
