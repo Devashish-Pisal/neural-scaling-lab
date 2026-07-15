@@ -4,3 +4,4 @@ pandas
 wandb
 dotenv
 loguru
+seaborn
