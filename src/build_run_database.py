@@ -170,7 +170,7 @@ def save_run_data_to_db(run:Run, dataset:str):
         row["crossover_epoch_val_acc1"] = -1
         row["crossover_epoch_val_acc5"] = -1
         row["total_runtime"] = perform_column_operation(history["_runtime"], "final")
-        row["gpu_partition"] = metadata["gpu"]
+        row["gpu_partition"] = metadata.get("gpu", None)
 
         new_row = pd.DataFrame([row], columns=DB_COLUMNS.keys())
         df_combined = pd.concat([database_df, new_row], axis=0)
