@@ -170,7 +170,7 @@ def save_run_data_to_db(run:Run, dataset:str):
         row["crossover_epoch_val_acc1"] = -1
         row["crossover_epoch_val_acc5"] = -1
         row["total_runtime"] = perform_column_operation(history["_runtime"], "final")
-        row["gpu_partition"] = metadata.get("gpu", None)
+        row["gpu_partition"] = metadata.get("gpu", None) if metadata else None
 
         new_row = pd.DataFrame([row], columns=DB_COLUMNS.keys())
         df_combined = pd.concat([database_df, new_row], axis=0)
@@ -205,21 +205,20 @@ def find_crossover_epochs(imgnet_runs_dict:dict, fornet_runs_dict:dict, api, ent
     assert len(imgnet_runs_dict) == 4 == len(fornet_runs_dict)
     database_df = pd.read_csv(MAIN_DATABASE_PATH, keep_default_na=False)
     for fraction, imgnet_run_id in imgnet_runs_dict.items():
-        # only consider fornet run which has bg_range = '0-100'
-        fornet_run_id = fornet_runs_dict[fraction][0]
         imgnet_run = api.run(f"{entity}/{project_name}/{imgnet_run_id[0]}")
-        fornet_run = api.run(f"{entity}/{project_name}/{fornet_run_id}")
         imgnet_config = imgnet_run.config
-        fornet_config = fornet_run.config
-        assert fornet_config["dataset"] == "fornet/all/cos" and fornet_config["bg_range"] == "0-100"
         assert imgnet_config["dataset"] == "fornet/all/1.0" and imgnet_config["bg_range"] is None
-        assert imgnet_config["fg_range"] == fornet_config["fg_range"]
-
-        imgnet_run_history = pd.DataFrame(imgnet_run.scan_history())
-        fornet_run_history = pd.DataFrame(fornet_run.scan_history())
-        database_df.loc[database_df["run_id"] == imgnet_run_id[0], "crossover_epoch_val_loss"] = find_crossover_point(imgnet_run_history, fornet_run_history, "val/loss")
-        database_df.loc[database_df["run_id"] == imgnet_run_id[0], "crossover_epoch_val_acc1"] = find_crossover_point(imgnet_run_history, fornet_run_history, "val/acc1")
-        database_df.loc[database_df["run_id"] == imgnet_run_id[0], "crossover_epoch_val_acc5"] = find_crossover_point(imgnet_run_history, fornet_run_history, "val/acc5")
+        fornet_bg_fractions = fornet_runs_dict[fraction]
+        for fornet_run_id in fornet_bg_fractions:
+            fornet_run = api.run(f"{entity}/{project_name}/{fornet_run_id}")
+            fornet_config = fornet_run.config
+            assert imgnet_config["fg_range"] == fornet_config["fg_range"]
+            assert fornet_config["dataset"] == "fornet/all/cos"
+            imgnet_run_history = pd.DataFrame(imgnet_run.scan_history())
+            fornet_run_history = pd.DataFrame(fornet_run.scan_history())
+            database_df.loc[database_df["run_id"] == fornet_run_id, "crossover_epoch_val_loss"] = find_crossover_point(imgnet_run_history, fornet_run_history, "val/loss")
+            database_df.loc[database_df["run_id"] == fornet_run_id, "crossover_epoch_val_acc1"] = find_crossover_point(imgnet_run_history, fornet_run_history, "val/acc1")
+            database_df.loc[database_df["run_id"] == fornet_run_id, "crossover_epoch_val_acc5"] = find_crossover_point(imgnet_run_history, fornet_run_history, "val/acc5")
     database_df.to_csv(MAIN_DATABASE_PATH, index=False)
 
 
