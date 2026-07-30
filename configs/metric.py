@@ -1,7 +1,7 @@
 METRICS = {
 
     # "metric-ViT-Ti-16_imgnet_fg-0-100_ep-300_steps-186k"
-    "vit-ti-16":{
+    "vit-ti/16":{
         "eval/number of parameters":5721832,
         "eval/macs":1076704704,
         "eval/flops":1461060180,
@@ -22,7 +22,7 @@ METRICS = {
     },
 
     # "metric-ViT-S-16_imgnet_fg-0-100_ep-300_steps-186k"
-    "vit-s-16":{
+    "vit-s/16":{
         "eval/number of parameters":22059496,
         "eval/macs":4244925312,
         "eval/flops":5013636264,
@@ -43,7 +43,7 @@ METRICS = {
     },
 
     # "metric-ViT-S-32_imgnet_fg-0-100_ep-300_steps-186k"
-    "vit-s-32":{
+    "vit-s/32":{
         "eval/number of parameters":22887784,
         "eval/macs":1120810752,
         "eval/flops":1177793568,
@@ -64,7 +64,7 @@ METRICS = {
     },
 
     # "metric-ViT-B-16_imgnet_fg-0-100_ep-300_steps-186k"
-    "vit-b-16":{
+    "vit-b/16":{
         "eval/number of parameters":86585320,
         "eval/macs":16855914240,
         "eval/flops":18393336144,
