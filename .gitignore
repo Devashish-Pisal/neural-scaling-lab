@@ -9,6 +9,7 @@ __pycache__/
 # IntelliJ Folders
 .idea/
 
+CLAUDE.md
 
 wandb_api_objects_structure.txt
 
