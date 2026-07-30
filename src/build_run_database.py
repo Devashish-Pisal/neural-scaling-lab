@@ -120,7 +120,9 @@ def perform_column_operation(column:pd.Series, operation:str):
     match operation:
         case "max": return column.max()
         case "min": return column.min()
-        case "final": return column.iloc[-1]
+        case "final":
+            valid = column.dropna()
+            return valid.iloc[-1] if not valid.empty else float("nan")
     raise ValueError(f"Operation '{operation}' is not implemented")
 
 
