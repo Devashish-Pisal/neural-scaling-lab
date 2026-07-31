@@ -444,8 +444,6 @@ def plot_crossover_flops_scaling(df: DataFrame, crossover_metric: str = "val_los
 
 
 _MODEL_SIZE_ORDER = ["ViT-Ti/16", "ViT-S/16", "ViT-S/32", "ViT-B/16", "ViT-B/28"]
-
-
 def plot_crossover_epoch_vs_dataset_fraction(df: DataFrame, crossover_metric: str = "val_loss") -> None:
     """Line plot of crossover epoch vs. dataset fraction, one line per model.
 
@@ -481,7 +479,9 @@ def plot_crossover_epoch_vs_dataset_fraction(df: DataFrame, crossover_metric: st
         for frac in fractions:
             frac_df = model_df[model_df["train_dataset_fraction"] == frac]
             valid = frac_df.loc[frac_df[crossover_col] > 0, crossover_col]
-            values.append(valid.mean() if len(valid) > 0 else np.nan)
+            mean = valid.mean() if len(valid) > 0 else np.nan
+            normalized_epoch = mean / frac_df.iloc[0]["total_epochs"] if mean is not np.nan else np.nan
+            values.append(normalized_epoch)
         epochs_by_model[model] = np.array(values, dtype=float)
 
     all_valid = np.concatenate([v[~np.isnan(v)] for v in epochs_by_model.values()])
