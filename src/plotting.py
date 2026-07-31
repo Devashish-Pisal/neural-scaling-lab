@@ -443,6 +443,105 @@ def plot_crossover_flops_scaling(df: DataFrame, crossover_metric: str = "val_los
 
 
 
+_MODEL_SIZE_ORDER = ["ViT-Ti/16", "ViT-S/16", "ViT-S/32", "ViT-B/16", "ViT-B/28"]
+
+
+def plot_crossover_epoch_vs_dataset_fraction(df: DataFrame, crossover_metric: str = "val_loss") -> None:
+    """Line plot of crossover epoch vs. dataset fraction, one line per model.
+
+    For each (model, fg_range) the crossover epoch is averaged across the
+    ForNet runs' bg_range variants (crossover is stored per ForNet run,
+    relative to the matched ImageNet run at the same fraction). Points where
+    none of the bg_range variants ever cross ImageNet are drawn as an
+    explicit red "X" at the top of the plot rather than left as a gap.
+    """
+    set_style()
+    crossover_col = f"crossover_epoch_{crossover_metric}"
+    if crossover_col not in df.columns:
+        raise ValueError(f"Crossover column '{crossover_col}' not found in database. "
+                         f"Available columns: {list(df.columns)}")
+    fornet = df[df["train_dataset_name"] == "fornet/all/cos"].copy()
+    if fornet.empty:
+        raise ValueError("No ForNet runs found in database.")
+
+    fractions = [0.10, 0.25, 0.50, 1.00]
+    models = sorted(
+        fornet["model_name"].unique(),
+        key=lambda m: _MODEL_SIZE_ORDER.index(m) if m in _MODEL_SIZE_ORDER else len(_MODEL_SIZE_ORDER)
+    )
+
+    # For each model x fraction, average the crossover epoch across bg_range
+    # variants that actually crossed (crossover_col > 0); -1 means that
+    # particular bg_range never crossed. A fraction is "never" only if none
+    # of its bg_range variants crossed.
+    epochs_by_model = {}
+    for model in models:
+        model_df = fornet[fornet["model_name"] == model]
+        values = []
+        for frac in fractions:
+            frac_df = model_df[model_df["train_dataset_fraction"] == frac]
+            valid = frac_df.loc[frac_df[crossover_col] > 0, crossover_col]
+            values.append(valid.mean() if len(valid) > 0 else np.nan)
+        epochs_by_model[model] = np.array(values, dtype=float)
+
+    all_valid = np.concatenate([v[~np.isnan(v)] for v in epochs_by_model.values()])
+    if all_valid.size == 0:
+        raise ValueError(f"No valid crossover epochs found for metric '{crossover_metric}'")
+    y_max = all_valid.max()
+    y_never = y_max * 1.12  # marker row for "never crossed" points, above all real data
+
+    metric_labels = {
+        "val_loss": ("Val Loss", "drops below"),
+        "val_acc1": ("Val Top-1 Accuracy", "rises above"),
+        "val_acc5": ("Val Top-5 Accuracy", "rises above"),
+    }
+    metric_title, direction = metric_labels.get(crossover_metric, (crossover_metric, "crosses"))
+
+    # Publication-friendly, colorblind-safe categorical palette, fixed order per model.
+    colors = sns.color_palette("colorblind", n_colors=len(models))
+
+    fig, ax = plt.subplots(figsize=(7, 5.5))
+    for i, model in enumerate(models):
+        y = epochs_by_model[model]
+        valid_mask = ~np.isnan(y)
+        ax.plot(
+            np.array(fractions)[valid_mask], y[valid_mask],
+            marker='o', markersize=7, linewidth=2, color=colors[i],
+            label=model, zorder=3,
+        )
+        never_mask = ~valid_mask
+        if never_mask.any():
+            never_x = np.array(fractions)[never_mask]
+            ax.scatter(
+                never_x, np.full(never_x.shape, y_never),
+                marker='x', s=110, linewidth=2.5, color='#d62728',
+                zorder=5,
+            )
+            for nx in never_x:
+                ax.annotate(
+                    "never", (nx, y_never), textcoords="offset points",
+                    xytext=(0, 6), ha="center", fontsize=8.5, color='#d62728', fontweight="bold",
+                )
+
+    ax.set_ylim(top=y_never * 1.12)
+    ax.set_xlabel("Dataset fraction $D$")
+    ax.set_ylabel(f"Crossover epoch (ForNet {direction} ImageNet)")
+    ax.set_title(f"Crossover Speed vs. Dataset Fraction ({metric_title})")
+    ax.set_xticks(fractions)
+    ax.set_xticklabels([f"{f:.2f}" for f in fractions])
+    ax.grid(True, which='major', ls='--', alpha=0.5)
+
+    handles, labels = ax.get_legend_handles_labels()
+    handles.append(Line2D([], [], marker='x', color='#d62728', ls='', markersize=8, markeredgewidth=2.5))
+    labels.append("No crossover (ForNet never beats ImageNet)")
+    ax.legend(handles, labels, fontsize=9, loc='best', framealpha=0.95)
+
+    plt.tight_layout()
+    fig.savefig(PDF_OUTPUTS_DIR / f'crossover_speed_{crossover_metric}.pdf')
+    fig.savefig(IMG_OUTPUT_DIR / f'crossover_speed_{crossover_metric}.png')
+    plt.show()
+
+
 def plot_flops_scaling_comparison(flops, imgnet_loss, fornet_loss):
     fig, ax = plt.subplots(figsize=(6, 5))
     ax.loglog(flops,imgnet_loss, 'o-', color='C3', markersize=8, label='ImageNet')
