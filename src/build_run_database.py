@@ -5,6 +5,7 @@ from wandb import Run
 from loguru import logger
 from dotenv import load_dotenv
 from configs.path_config import MAIN_DATABASE_PATH
+from configs.metric import METRICS
 from configs.config import WANDB_RUN_CONFIG, DB_COLUMNS, EXPERIMENT_CONSTANTS, FG_RANGE_COUNT_MAPPING, BG_RANGE_COUNT_MAPPING
 
 
