@@ -103,4 +103,8 @@ if __name__ == '__main__':
     plot_fg_bg_heatmaps(filter_database())
     plot_fornet_vs_imagenet_delta_gain(filter_database())
 
+    plot_crossover_epoch_vs_dataset_fraction(filter_database(), "val_loss")
+    plot_crossover_epoch_vs_dataset_fraction(filter_database(), "val_acc1")
+    plot_crossover_epoch_vs_dataset_fraction(filter_database(), "val_acc5")
+
     # plot_crossover_flops_scaling(filter_database())
