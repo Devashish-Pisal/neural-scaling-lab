@@ -83,4 +83,25 @@ METRICS = {
             "value":3521.77556177109
         }
     },
+
+    # "metric-ViT-B-28_imgnet_fg-0-100_ep-300_steps-186k"
+    "vit-b/28": {
+        "eval/number of parameters": 87700456,
+        "eval/macs": 5639572224,
+        "eval/flops": 5824372176,
+        "eval/inference_memory_@128": 1051474432,
+        "eval/inference_memory_@64": 949107200,
+        "eval/inference_memory_@32": 895564288,
+        "eval/inference_memory_@16": 874332160,
+        "eval/inference_memory_@1": 857432576,
+        "eval/training_time": {
+            "batch_size": 512,
+            "step_time_ms": 893.1580729166667
+        },
+        "eval/peak_memory": 14791792640,
+        "eval/throughput": {
+            "batch_size": 8192,
+            "value": 10049.82455120593
+        }
+    },
 }
