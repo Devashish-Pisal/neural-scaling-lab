@@ -200,6 +200,7 @@ def find_crossover_point(imgnet_df: pd.DataFrame, fornet_df: pd.DataFrame, colum
             raise ValueError(f"Wrong column name {column_name} provided")
         if not comparison.any():
             return -1
+        comparison.iloc[0:5] = False  # Ignore first 5 epochs, as they are warmup epochs don't consider them for crossover
         first_true_idx = comparison.idxmax()
         return int(merged.loc[first_true_idx, "epoch"])
 
