@@ -5,3 +5,4 @@ wandb
 dotenv
 loguru
 seaborn
+pyarrow
