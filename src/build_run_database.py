@@ -164,10 +164,12 @@ def save_run_data_to_db(run:Run, dataset:str):
         row["final_train_loss"] = perform_column_operation(history["train/loss"], "final")
         row["steps_per_epoch"] = int(row["fg_count"] / EXPERIMENT_CONSTANTS["global_batch_size"])
         row["total_steps"] = int(row["steps_per_epoch"] * config["epochs"])
-        row["flops_per_epoch"] = calculate_flops_per_epoch(config["model"].strip().lower(), row["steps_per_epoch"])
-        # Formula 1 for total_flops: C = 6 * N * (total_steps * batch_size)
-        # Formula 2 for total_flops: C = 6 * N * (train_dataset_size * epochs)
-        row["total_flops"] = row["flops_per_epoch"] * row["total_epochs"]
+
+        row["parameter_count"] = METRICS[config["model"].strip().lower()]["eval/number of parameters"]
+        row["macs_per_image"] = METRICS[config["model"].strip().lower()]["eval/macs"]
+        row["flops_per_image"] = METRICS[config["model"].strip().lower()]["eval/flops"]
+        row["total_flops"] = 3 * row["flops_per_image"] * row["train_dataset_size"] * row["total_epochs"]
+
         # modify crossover values later, once all run for one model are finished
         row["crossover_epoch_val_loss"] = -1
         row["crossover_epoch_val_acc1"] = -1
