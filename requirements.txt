@@ -6,3 +6,4 @@ dotenv
 loguru
 seaborn
 pyarrow
+scipy
