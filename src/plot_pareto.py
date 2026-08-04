@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from matplotlib.lines import Line2D
 from scipy.optimize import curve_fit
-
 from configs.path_config import IMG_OUTPUT_DIR, PDF_OUTPUTS_DIR
 from src.plotting import set_style, _MODEL_SIZE_ORDER
 
