@@ -11,7 +11,10 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from src.data_processing import filter_database
 from configs.path_config import IMG_OUTPUT_DIR, PDF_OUTPUTS_DIR
+from configs.config import EXPERIMENT_CONSTANTS
 from matplotlib.lines import Line2D
+
+
 
 def set_style():
     plt.style.use('seaborn-v0_8-whitegrid')
@@ -31,30 +34,6 @@ def calculate_fit(y_axis_values, x_axis_values):
     coefficients = np.polyfit(log_x_values, log_y_values, 1)
     fit = np.exp(coefficients[1]) * x_axis_values ** coefficients[0]
     return coefficients, fit
-
-
-
-def plot_steps_allocation(D, steps, ds_name, ref_exponent=0.8):
-    fig, ax = plt.subplots(figsize=(6, 5))
-    ax.loglog(D, steps, 'o-', color='C0', markersize=8, label=f'{ds_name} Measured steps')
-    # Reference line with the expected scaling exponent
-    ref_steps = max(steps) * (D / max(D)) ** ref_exponent
-    ax.loglog(D, ref_steps, '--', color='gray', alpha=0.7,
-              label=f'Reference: $S \\propto D^{{{ref_exponent}}}$')
-    all_steps_values = pd.concat([steps, ref_steps], ignore_index=True)
-    show_exact_values(ax, all_steps_values, "y")
-    show_exact_values(ax, D, "x")
-    ax.set_xlabel('Dataset size $D$')
-    ax.set_ylabel('Training steps $S$')
-    ax.set_title(f'{ds_name} Steps $S$ vs {ds_name} Samples $D$')
-    ax.legend()
-    ax.grid(True, which='major', ls='--', alpha=0.5)
-    ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f'{x:,.0f}'))
-    plt.tight_layout()
-    fig.savefig(PDF_OUTPUTS_DIR / f'{ds_name.lower()}_steps_allocation.pdf')
-    fig.savefig(IMG_OUTPUT_DIR / f'{ds_name.lower()}_steps_allocation.png')
-    plt.show()
-
 
 
 def plot_scaling_law(df:DataFrame):
@@ -542,37 +521,204 @@ def plot_crossover_epoch_vs_dataset_fraction(df: DataFrame, crossover_metric: st
     plt.show()
 
 
-def plot_flops_scaling_comparison(flops, imgnet_loss, fornet_loss):
-    fig, ax = plt.subplots(figsize=(6, 5))
-    ax.loglog(flops,imgnet_loss, 'o-', color='C3', markersize=8, label='ImageNet')
-    ax.loglog(flops,fornet_loss, 's-', color='C4', markersize=8, label='ForNet')
-    # Power‑law fit for ImageNet
-    log_flops_imgnet, log_L_imgnet = np.log(flops), np.log(imgnet_loss)
-    coeffs_imgnet = np.polyfit(log_flops_imgnet, log_L_imgnet, 1)
-    fit_imgnet = np.exp(coeffs_imgnet[1]) * flops ** coeffs_imgnet[0]
-    ax.loglog(flops, fit_imgnet, '--', color='orange', alpha=0.7,
-              label=f'ImageNet Fit: $L \\propto C^{{{coeffs_imgnet[0]:.2f}}}$')
-    # Power‑law fit for ForNet
-    log_flops_fornet, log_L_fornet = np.log(flops), np.log(fornet_loss)
-    coeffs_fornet = np.polyfit(log_flops_fornet, log_L_fornet, 1)
-    fit_fornet = np.exp(coeffs_fornet[1]) * flops ** coeffs_fornet[0]
-    ax.loglog(flops, fit_fornet, '--', color='green', alpha=0.7,
-              label=f'ForNet Fit: $L \\propto C^{{{coeffs_fornet[0]:.2f}}}$')
-    all_loss_values =  pd.concat([imgnet_loss, fornet_loss], ignore_index=True)
-    ax = show_exact_values(ax, all_loss_values, "y")
-    ax.xaxis.set_major_locator(ticker.FixedLocator(flops))
-    ax.xaxis.set_major_formatter(
-        ticker.FuncFormatter(lambda x, _: f'{x / 1e18:.1f}e18')
+def plot_flops_scaling_comparison(df: DataFrame):
+    set_style()
+
+    df = df[df["bg_range"].isin(["0-100", None])].copy()
+    df["architecture"] = df["model_name"].str.split("/").str[0]
+    df["patch_size"] = df["model_name"].str.split("/").str[1]
+
+    architectures = sorted(df["architecture"].unique())
+
+    patch_colors = {"16": "#1f77b4", "28": "#2ca02c", "32": "#d62728"}
+    datasets = {
+        "fornet/all/1.0": ("ImageNet", "o"),
+        "fornet/all/cos": ("ForNet", "s"),
+    }
+
+    ncols = 3
+    nrows = math.ceil(len(architectures) / ncols)
+    fig, axes = plt.subplots(
+        nrows,
+        ncols,
+        figsize=(8 * ncols, 6 * nrows),
+        sharey=True,
     )
-    ax.xaxis.set_minor_locator(ticker.NullLocator())
-    ax.set_xlabel('Training Compute (FLOPs) $C$')
-    ax.set_ylabel('Validation loss $L$')
-    ax.set_title('Compute Scaling Comparison: ImageNet vs ForNet')
-    ax.legend()
-    ax.grid(True, which='major', ls='--', alpha=0.5)
-    plt.tight_layout()
-    fig.savefig(PDF_OUTPUTS_DIR / 'flops_scaling_comparison.pdf')
-    fig.savefig(IMG_OUTPUT_DIR / 'flops_scaling_comparison.png')
+    axes = np.atleast_1d(axes).ravel()
+    for ax, arch in zip(axes, architectures):
+        arch_df = df[df["architecture"] == arch]
+        for patch in sorted(arch_df["patch_size"].unique(), key=int):
+            patch_df = arch_df[arch_df["patch_size"] == patch]
+            color = patch_colors.get(patch, "black")
+            for dataset_name, (dataset_label, marker) in datasets.items():
+                current_df = patch_df[patch_df["train_dataset_name"] == dataset_name]
+                if len(current_df) < 2:
+                    continue
+                current_df = current_df.sort_values("total_flops")
+                C = current_df["total_flops"].to_numpy(float)
+                L = current_df["min_val_loss"].to_numpy(float)
+                coeffs, fit = calculate_fit(L, C)
+                alpha, a = coeffs[0], np.exp(coeffs[1])
+                pred = coeffs[0] * np.log(C) + coeffs[1]
+                r2 = 1 - np.sum((np.log(L) - pred) ** 2) / np.sum((np.log(L) - np.mean(np.log(L))) ** 2)
+                ax.scatter(
+                    C, L, s=70, marker=marker, color=color,
+                    edgecolor="white", linewidth=0.8, zorder=3
+                )
+                ax.loglog(
+                    C, fit, "--", color=color, lw=1.5,
+                    label=rf"P{patch} {dataset_label}: $L={a:.2e}C^{{{alpha:.2f}}}$ ($R^2={r2:.3f}$)"
+                )
+        ax.set_title(arch, fontsize=13, fontweight="bold")
+        ax.set_xlabel("Training compute (FLOPs) $C$")
+        ax.grid(True, which="major", ls="--", alpha=0.35)
+        ax.grid(True, which="minor", ls=":", alpha=0.15)
+        # Auto log ticks can collapse to <4 labels when a single patch size's
+        # FLOPs span less than a decade, so pin ticks to the actual FLOPs
+        # values present (>=4, since every model has 4 dataset fractions).
+        flop_ticks = sorted(float(v) for v in arch_df["total_flops"].unique())
+        ax.xaxis.set_major_locator(ticker.FixedLocator(flop_ticks))
+        ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f'{x / 1e18:.2f}e18'))
+        ax.xaxis.set_minor_locator(ticker.NullLocator())
+        plt.setp(ax.get_xticklabels(), rotation=40, ha="right", fontsize=9)
+        handles, labels = ax.get_legend_handles_labels()
+        handles += [
+            Line2D([], [], marker="o", color="black", ls="", markersize=7),
+            Line2D([], [], marker="s", color="black", ls="", markersize=7),
+        ]
+        labels += ["ImageNet", "ForNet"]
+        ax.legend(handles, labels, fontsize=8, loc="best", framealpha=0.95)
+    for ax in axes[len(architectures):]:
+        fig.delaxes(ax)
+    for ax in axes[::ncols]:
+        if ax in fig.axes:
+            ax.set_ylabel("Validation loss $L$")
+    fig.suptitle("Compute (FLOPs) Scaling Laws", fontsize=16, fontweight="bold")
+    fig.tight_layout()
+    fig.savefig(PDF_OUTPUTS_DIR / "flops_scaling_comparison.pdf")
+    fig.savefig(IMG_OUTPUT_DIR / "flops_scaling_comparison.png")
+    plt.show()
+
+
+def plot_model_scaling_comparison(df: DataFrame):
+    set_style()
+    # x-axis is parameter count N (S/16 and S/32 share N=22M, B/16 and B/28
+    # share N=86M) so a proper L ~ a*N^b law can be fit; fits use the true N,
+    # but points sharing an N are nudged apart (N_plot) purely for display so
+    # markers/labels don't stack, and x-ticks list every model at that N.
+
+    model_params = EXPERIMENT_CONSTANTS["model_parameters"]  # "vit-ti/16" -> N, lowercase keys
+    fractions = [0.10, 0.25, 0.50, 1.00]
+    models = [m for m in _MODEL_SIZE_ORDER if m in df["model_name"].unique()]
+    if not models:
+        raise ValueError("No known models (from _MODEL_SIZE_ORDER) found in database.")
+    param_count = {m: model_params[m.lower()] for m in models}
+
+    # Group models sharing a parameter count for tick labels, e.g. 22M -> "S/16, S/32"
+    models_at_n = {}
+    for m, n in param_count.items():
+        models_at_n.setdefault(n, []).append(m.split("ViT-")[-1])
+
+    # Nudge models sharing an N apart horizontally (display only) so their
+    # markers/labels don't overlap.
+    dodge = {}
+    for n, group_shorts in models_at_n.items():
+        span = 0.16
+        offsets = [0.0] if len(group_shorts) == 1 else np.linspace(-span / 2, span / 2, len(group_shorts))
+        for short, off in zip(group_shorts, offsets):
+            dodge[f"ViT-{short}"] = off
+    n_plot = {m: param_count[m] * (1 + dodge[m]) for m in models}
+
+    datasets = {
+        "fornet/all/1.0": ("ImageNet", "#1f77b4", "o"),
+        "fornet/all/cos": ("ForNet", "#d62728", "s"),
+    }
+
+    fig, axes = plt.subplots(2, 2, figsize=(14, 11), sharey=True)
+    axes = axes.ravel()
+    y_bounds = []
+
+    for ax, frac in zip(axes, fractions):
+        rows = []
+        for model in models:
+            img_row = df[
+                (df["model_name"] == model) &
+                (df["train_dataset_name"] == "fornet/all/1.0") &
+                (df["train_dataset_fraction"] == frac)
+            ]
+            if len(img_row):
+                loss = img_row["min_val_loss"].iloc[0]
+                rows.append({"model": model, "N": param_count[model], "N_plot": n_plot[model],
+                             "dataset_name": "fornet/all/1.0", "loss": loss, "lo": 0.0, "hi": 0.0})
+
+            fn_rows = df[
+                (df["model_name"] == model) &
+                (df["train_dataset_name"] == "fornet/all/cos") &
+                (df["train_dataset_fraction"] == frac)
+            ]
+            if len(fn_rows):
+                vals = fn_rows["min_val_loss"].to_numpy(float)
+                mean = vals.mean()
+                rows.append({"model": model, "N": param_count[model], "N_plot": n_plot[model],
+                             "dataset_name": "fornet/all/cos", "loss": mean,
+                             "lo": mean - vals.min(), "hi": vals.max() - mean})
+        frac_df = pd.DataFrame(rows)
+        y_bounds += (frac_df["loss"] - frac_df["lo"]).tolist()
+        y_bounds += (frac_df["loss"] + frac_df["hi"]).tolist()
+
+        for dataset_name, (label, color, marker) in datasets.items():
+            sub = frac_df[frac_df["dataset_name"] == dataset_name]
+            if sub.empty:
+                continue
+            N = sub["N"].to_numpy(float)
+            N_plot = sub["N_plot"].to_numpy(float)
+            L = sub["loss"].to_numpy(float)
+            ax.errorbar(
+                N_plot, L, yerr=[sub["lo"].to_numpy(float), sub["hi"].to_numpy(float)],
+                fmt=marker, color=color, markersize=8, markeredgecolor="white",
+                markeredgewidth=0.8, capsize=4, zorder=3, ls="", label=label,
+            )
+            if len(N) >= 2:
+                coeffs, _ = calculate_fit(L, N)
+                alpha, a = coeffs[0], np.exp(coeffs[1])
+                pred = coeffs[0] * np.log(N) + coeffs[1]
+                r2 = 1 - np.sum((np.log(L) - pred) ** 2) / np.sum((np.log(L) - np.mean(np.log(L))) ** 2)
+                n_smooth = np.linspace(N.min(), N.max(), 100)
+                ax.plot(
+                    n_smooth, a * n_smooth ** alpha, "--", color=color, lw=1.5,
+                    label=rf"{label} Fit: $L={a:.2f}N^{{{alpha:.2f}}}$ ($R^2={r2:.3f}$)"
+                )
+
+        # One label per model (above its highest point) since N_plot already
+        # separates models that share a true parameter count.
+        for model, g in frac_df.groupby("model"):
+            ax.annotate(
+                model.split("ViT-")[-1], xy=(g["N_plot"].iloc[0], (g["loss"] + g["hi"]).max()),
+                xytext=(0, 7), textcoords="offset points", ha="center",
+                fontsize=8, color="black", fontweight="bold", clip_on=False,
+            )
+
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        n_ticks = sorted(models_at_n)
+        ax.xaxis.set_major_locator(ticker.FixedLocator(n_ticks))
+        ax.xaxis.set_major_formatter(ticker.FuncFormatter(
+            lambda x, _: f"{x / 1e6:.1f}M\n({', '.join(models_at_n.get(x, []))})"
+        ))
+        ax.xaxis.set_minor_locator(ticker.NullLocator())
+        ax.tick_params(axis="x", labelsize=8)
+        ax.set_title(f"Dataset fraction = {frac:.2f}", fontsize=12, fontweight="bold")
+        ax.set_xlabel("Parameter count $N$")
+        ax.grid(True, which="major", ls="--", alpha=0.4)
+        ax.legend(fontsize=8, loc="best", framealpha=0.95)
+
+    axes[0].set_ylim(min(y_bounds) * 0.85, max(y_bounds) * 1.35)
+    for ax in axes[::2]:
+        ax.set_ylabel("Validation loss $L$ (min)")
+    fig.suptitle("Model Scaling: Validation Loss vs. Parameter Count", fontsize=16, fontweight="bold")
+    fig.tight_layout()
+    fig.savefig(PDF_OUTPUTS_DIR / "model_scaling_comparison.pdf")
+    fig.savefig(IMG_OUTPUT_DIR / "model_scaling_comparison.png")
     plt.show()
 
 
@@ -594,28 +740,6 @@ def plot_acc_comparison(D, imgnet_acc, fornet_acc, acc_type:str):
     fig.savefig(IMG_OUTPUT_DIR / f'{acc_type.lower()}_acc_comparison.png')
     plt.show()
 
-
-def plot_compute_efficiency_comparison(flops, imgnet_acc, fornet_acc, acc_type='Top-1'):
-    set_style()
-    fig, ax = plt.subplots(figsize=(6, 5))
-    ax.plot(flops, imgnet_acc, 'o-', color='C2', markersize=8, label='ImageNet')
-    ax.plot(flops, fornet_acc, 's-', color='C3', markersize=8, label='ForNet')
-    all_acc = np.concatenate([imgnet_acc, fornet_acc])
-    show_exact_values(ax, all_acc, "y")
-    ax.xaxis.set_major_locator(ticker.FixedLocator(flops))
-    ax.xaxis.set_major_formatter(
-        ticker.FuncFormatter(lambda x, _: f'{x/1e18:.1f}e18')
-    )
-    ax.xaxis.set_minor_locator(ticker.NullLocator())
-    ax.set_xlabel('Training compute (FLOPs) $C$')
-    ax.set_ylabel(f'{acc_type} Accuracy (%)')
-    ax.set_title(f'Compute Efficiency: {acc_type} Accuracy vs FLOPs')
-    ax.legend()
-    ax.grid(True, ls='--', alpha=0.5)
-    plt.tight_layout()
-    fig.savefig(PDF_OUTPUTS_DIR / f'{acc_type.lower()}_compute_efficiency_comparison.pdf')
-    fig.savefig(IMG_OUTPUT_DIR / f'{acc_type.lower()}_compute_efficiency_comparison.png')
-    plt.show()
 
 
 def plot_sample_efficiency_comparison(D, imgnet_acc, fornet_acc, acc_type='Top-1',
