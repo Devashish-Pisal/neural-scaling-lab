@@ -2,22 +2,22 @@ METRICS = {
 
     # "metric-ViT-Ti-16_imgnet_fg-0-100_ep-300_steps-186k"
     "vit-ti/16":{
-        "eval/number of parameters":5721832,
-        "eval/macs":1076704704,
-        "eval/flops":1461060180,
-        "eval/inference_memory_@128":505310720,
-        "eval/inference_memory_@64":427847168,
-        "eval/inference_memory_@32":389115392,
-        "eval/inference_memory_@16":369749504,
-        "eval/inference_memory_@1":352712192,
+        "eval/number of parameters":5721832, # static model property
+        "eval/macs":1076704704, # macs for 1 image
+        "eval/flops":1461060180, # flops for 1 image
+        "eval/inference_memory_@128":505310720, # memory for 128 images
+        "eval/inference_memory_@64":427847168, # memory for 64 images
+        "eval/inference_memory_@32":389115392, # memory for 32 images
+        "eval/inference_memory_@16":369749504, # memory for 16 images
+        "eval/inference_memory_@1":352712192, # memory for 1 images
         "eval/training_time":{
             "batch_size":512,
-            "step_time_ms":1062.9527777777778
+            "step_time_ms":1062.9527777777778 # step completion time with for batch size:  eval/training_time["batch_size"]
         },
-        "eval/peak_memory":10529998848,
+        "eval/peak_memory":10529998848, # peak memory usage for 512 images for 1 GPU (used global batch size is 2048 with 4 GPUs)
         "eval/throughput":{
             "batch_size":4096,
-            "value":16927.09742851711
+            "value":16927.09742851711 # images/sec for batch size: eval/throughput["batch_size"]
         }
     },
 
