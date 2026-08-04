@@ -12,9 +12,11 @@ __pycache__/
 CLAUDE.md
 
 wandb_api_objects_structure.txt
+flops-measurement-units.txt
 
 data/
 outputs/
+context/
 
 # Distribution / packaging
 .Python
