@@ -19,4 +19,5 @@ TESTS_DIR = PROJECT_ROOT / "tests"
 
 
 # Files
-MAIN_DATABASE_PATH = DATABASE_DIR / "all_runs.csv"
+MAIN_EXPERIMENT_RUNS_FILE_PATH = DATABASE_DIR / "main_experiment_runs.csv"
+EXTREME_BG_RUNS_FILE_PATH = DATABASE_DIR / "extreme_bg_runs.csv"
