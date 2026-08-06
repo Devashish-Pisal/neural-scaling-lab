@@ -1,6 +1,6 @@
 import pandas as pd
 from pathlib import Path
-from configs.path_config import RAW_DATA_DIR, MAIN_DATABASE_PATH
+from configs.path_config import RAW_DATA_DIR, MAIN_EXPERIMENT_RUNS_FILE_PATH
 
 
 def load_raw_file(file_name:Path):
@@ -28,7 +28,7 @@ def get_fornet_data(processed_data, csv_config):
 def filter_database(
         input_dataframe=None, run_id=None, run_name=None, model_name=None, train_dataset_name=None,
         train_dataset_fraction=None, fg_range=None, bg_range=None, total_epochs=None):
-    database = pd.read_csv(MAIN_DATABASE_PATH)
+    database = pd.read_csv(MAIN_EXPERIMENT_RUNS_FILE_PATH)
     if input_dataframe is not None:
         database = input_dataframe
     if run_id is not None:
