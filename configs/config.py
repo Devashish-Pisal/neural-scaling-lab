@@ -20,7 +20,7 @@ COLUMN_NAMES = {
 }
 
 
-WANDB_RUN_CONFIG = {
+MAIN_EXPERIMENT_ID_MAPPING = {
     "vit-s/16": {
         "imagenet_run_ids": {
             1.00: ["7zhrps5n"],
@@ -103,6 +103,54 @@ WANDB_RUN_CONFIG = {
     },
 }
 
+EXTREME_BG_ID_MAPPING = {
+    "oip-cos":{
+        "vit-s/16":{
+            # FG Fraction
+            1.00: { # FG Percentage: 100%; FG Range: "0-100"
+                # BG Fraction:  RUN ID
+                0.05: "a6n0flf1", # 5%
+                0.01: "2lpp8zmr", # 1%
+                0.001: "jvgppsf2", # 0.1%
+                0.0005: "cmz99zd5", # 0.05%
+                0.0001: "wz7pd7uj", # 0.01%
+                0.00001: "yr8ifqbl", # 0.001%
+                0.000001: "5crvkryy", # 0.0001%
+            }
+        },
+        "vit-b/16": {
+            # FG Fraction
+            0.10: {  # FG Percentage: 10%; FG Range: "0-10"
+                # BG Fraction: RUN ID
+                0.05: "iva4qhr0",  # 5%
+                0.01: "9la6za1q",  # 1%
+                0.001: "d8qnotgt",  # 0.1%
+            }
+        }
+    },
+    "oip-0.0": {
+    #    "vit-s/16": {
+    #        # FG Fraction
+    #        1.00: {  # FG Percentage: 100%; FG Range: "0-100"
+    #            # BG Fraction:  RUN ID
+    #            0.01: "",  # 1%
+    #            0.001: "",  # 0.1%
+    #            0.0001: "",  # 0.01%
+    #            0.00001: "",  # 0.001%
+    #            0.000001: "",  # 0.0001%
+    #        }
+    #    },
+        "vit-b/16": {
+            # FG Fraction
+            0.10: {  # FG Percentage: 10%; FG Range: "0-10"
+                # BG Fraction: RUN ID
+                0.05: "0bgvb89n",  # 5%
+                0.01: "34i1avzi",  # 1%
+                0.001: "ooh1vk69",  # 0.1%
+            }
+        }
+    }
+}
 
 
 EXPERIMENT_CONSTANTS = {
@@ -130,7 +178,8 @@ DB_COLUMNS = {
     "fg_count": "Foregrounds (#)",
     "bg_count": "Backgrounds (#)",
     "train_dataset_size": "Dataset size (#)",
-    "train_dataset_fraction": "Dataset fraction",
+    "train_dataset_fraction": "Dataset fraction", # alternative name fg_fraction
+    "bg_fraction": "Background subset fraction",
     "total_epochs": "Epochs",
 
     # Outputs
@@ -162,7 +211,8 @@ DB_COLUMNS = {
 }
 
 
-
+# COUNT is taken before pruning (after pruning, count reduces little bit)
+# NOT SURE, WHETHER PRUNING IS ALSO APPLIED FOR FOREGROUNDS OR NOT
 FG_RANGE_COUNT_MAPPING = {
     "0-10": 127_511,
     "0-25": 318_624,
@@ -170,10 +220,19 @@ FG_RANGE_COUNT_MAPPING = {
     "0-100": 1_274_557
 }
 
+
+# COUNT is taken before pruning (after pruning, count reduces little bit)
 BG_RANGE_COUNT_MAPPING = {
-    "0-10": 113_767,
-    "0-25": 284_111,
-    "0-50": 569_433,
-    "0-100": 1_145_497,
+    "0-0.0001": 1,
+    "0-0.001": 13,
+    "0-0.01": 127,
+    "0-0.05": 637,
+    "0-0.1": 1_275,
+    "0-1": 12_746,
+    "0-5": 63_782,
+    "0-10": 127_510,
+    "0-25": 318_624,
+    "0-50": 637_327,
+    "0-100": 1_274_556,
     "null": None
 }
