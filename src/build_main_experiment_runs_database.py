@@ -3,10 +3,11 @@ import wandb
 import pandas as pd
 from wandb import Run
 from loguru import logger
+from pathlib import Path
 from dotenv import load_dotenv
-from configs.path_config import MAIN_DATABASE_PATH
+from configs.path_config import MAIN_EXPERIMENT_RUNS_FILE_PATH
 from configs.metric import METRICS
-from configs.config import WANDB_RUN_CONFIG, DB_COLUMNS, EXPERIMENT_CONSTANTS, FG_RANGE_COUNT_MAPPING, BG_RANGE_COUNT_MAPPING
+from configs.config import MAIN_EXPERIMENT_ID_MAPPING, DB_COLUMNS, EXPERIMENT_CONSTANTS, FG_RANGE_COUNT_MAPPING, BG_RANGE_COUNT_MAPPING
 
 
 
@@ -107,14 +108,14 @@ def calculate_flops_per_epoch(model_name, steps_per_epoch):
     return 6 * model_param_count * EXPERIMENT_CONSTANTS["global_batch_size"] * steps_per_epoch
 
 
-def create_main_database():
-    if not MAIN_DATABASE_PATH.exists():
-        MAIN_DATABASE_PATH.touch()
-        logger.info(f"Database file created at path '{MAIN_DATABASE_PATH}'")
-        with open(MAIN_DATABASE_PATH, "w", encoding="utf-8") as file:
+def create_database(database_file_path: Path):
+    if not database_file_path.exists():
+        database_file_path.touch()
+        logger.info(f"Database file created at path '{database_file_path}'")
+        with open(database_file_path, "w", encoding="utf-8") as file:
             file.write(",".join(DB_COLUMNS.keys()))
     else:
-        logger.info(f"Database file already exists at path '{MAIN_DATABASE_PATH}'")
+        logger.info(f"Database file already exists at path '{database_file_path}'")
 
 
 def perform_column_operation(column:pd.Series, operation:str):
@@ -127,8 +128,8 @@ def perform_column_operation(column:pd.Series, operation:str):
     raise ValueError(f"Operation '{operation}' is not implemented")
 
 
-def save_run_data_to_db(run:Run, dataset:str):
-    database_df = pd.read_csv(MAIN_DATABASE_PATH, keep_default_na=False)
+def save_run_data_to_db(run:Run, dataset_path:Path):
+    database_df = pd.read_csv(dataset_path, keep_default_na=False)
     if not run.id in database_df["run_id"].values:
         config = run.config  # dict
         metadata = run.metadata  # dict
@@ -147,7 +148,10 @@ def save_run_data_to_db(run:Run, dataset:str):
         fg_range_list = config["fg_range"].split("-")
         start = int(fg_range_list[0])
         end = int(fg_range_list[1])
-        row["train_dataset_fraction"] = (end-start)/100
+        row["train_dataset_fraction"] = (end-start)/100  # alternative colum name fg_fraction
+
+        calc_bg_fraction = lambda start_and_end: (float(start_and_end[1]) - float(start_and_end[0]))/100
+        row["bg_fraction"] = "null" if config["bg_range"] is None else calc_bg_fraction(config["bg_range"].split("-"))
 
         row["total_epochs"] = config["epochs"]
         row["min_train_loss"] = perform_column_operation(history["train/loss"], "min")
@@ -179,7 +183,7 @@ def save_run_data_to_db(run:Run, dataset:str):
 
         new_row = pd.DataFrame([row], columns=DB_COLUMNS.keys())
         df_combined = pd.concat([database_df, new_row], axis=0)
-        df_combined.to_csv(MAIN_DATABASE_PATH, index=False)
+        df_combined.to_csv(dataset_path, index=False)
         logger.info(f"New row written to database | Row {row}")
     else:
         logger.info(f"Data of run {run.id} is already stored in database | Run name '{run.name}'")
@@ -209,7 +213,7 @@ def find_crossover_point(imgnet_df: pd.DataFrame, fornet_df: pd.DataFrame, colum
 
 def find_crossover_epochs(imgnet_runs_dict:dict, fornet_runs_dict:dict, api, entity, project_name):
     assert len(imgnet_runs_dict) == 4 == len(fornet_runs_dict)
-    database_df = pd.read_csv(MAIN_DATABASE_PATH, keep_default_na=False)
+    database_df = pd.read_csv(MAIN_EXPERIMENT_RUNS_FILE_PATH, keep_default_na=False)
     for fraction, imgnet_run_id in imgnet_runs_dict.items():
         imgnet_run = api.run(f"{entity}/{project_name}/{imgnet_run_id[0]}")
         imgnet_config = imgnet_run.config
@@ -225,40 +229,40 @@ def find_crossover_epochs(imgnet_runs_dict:dict, fornet_runs_dict:dict, api, ent
             database_df.loc[database_df["run_id"] == fornet_run_id, "crossover_epoch_val_loss"] = find_crossover_point(imgnet_run_history, fornet_run_history, "val/loss")
             database_df.loc[database_df["run_id"] == fornet_run_id, "crossover_epoch_val_acc1"] = find_crossover_point(imgnet_run_history, fornet_run_history, "val/acc1")
             database_df.loc[database_df["run_id"] == fornet_run_id, "crossover_epoch_val_acc5"] = find_crossover_point(imgnet_run_history, fornet_run_history, "val/acc5")
-    database_df.to_csv(MAIN_DATABASE_PATH, index=False)
+    database_df.to_csv(MAIN_EXPERIMENT_RUNS_FILE_PATH, index=False)
 
 
 
 
-def build_database():
+def build_main_experiment_runs_database():
     load_dotenv()
     api = wandb.Api(api_key=os.getenv("WANDB_API_KEY"))
     entity = os.getenv("WANDB_ENTITY")
     project_name = os.getenv("WANDB_PROJECT_NAME")
-    models = WANDB_RUN_CONFIG.keys()
-    create_main_database()
+    models = MAIN_EXPERIMENT_ID_MAPPING.keys()
+    create_database(MAIN_EXPERIMENT_RUNS_FILE_PATH)
     for model in models:
-        imgnet_runs_dict = WANDB_RUN_CONFIG[model]["imagenet_run_ids"]
-        fornet_runs_dict = WANDB_RUN_CONFIG[model]["fornet_run_ids"]
+        imgnet_runs_dict = MAIN_EXPERIMENT_ID_MAPPING[model]["imagenet_run_ids"]
+        fornet_runs_dict = MAIN_EXPERIMENT_ID_MAPPING[model]["fornet_run_ids"]
         for fraction, ids in imgnet_runs_dict.items():
             assert len(ids) == 1
             run = api.run(f"{entity}/{project_name}/{ids[0]}")
             check_ds_fraction_and_run_id_mapping(run, fraction)
             validate_imgnet_run(run, model)
-            save_run_data_to_db(run, run.config["dataset"])
+            save_run_data_to_db(run, MAIN_EXPERIMENT_RUNS_FILE_PATH)
         for fraction, ids in fornet_runs_dict.items():
             assert 0 < len(ids) < 5
             for run_id in ids:
                 run = api.run(f"{entity}/{project_name}/{run_id}")
                 check_ds_fraction_and_run_id_mapping(run, fraction)
                 validate_fornet_run(run, model)
-                save_run_data_to_db(run, run.config["dataset"])
+                save_run_data_to_db(run, MAIN_EXPERIMENT_RUNS_FILE_PATH)
         find_crossover_epochs(imgnet_runs_dict, fornet_runs_dict, api, entity, project_name)
-        logger.success(f"All '{model}' model model runs are processed.")
+        logger.success(f"All '{model}'  model runs are processed.")
 
 
 
 if __name__=="__main__":
-    build_database()
+    build_main_experiment_runs_database()
 
 
