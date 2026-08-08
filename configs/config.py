@@ -129,17 +129,17 @@ EXTREME_BG_ID_MAPPING = {
         }
     },
     "oip-0.0": {
-    #    "vit-s/16": {
-    #        # FG Fraction
-    #        1.00: {  # FG Percentage: 100%; FG Range: "0-100"
-    #            # BG Fraction:  RUN ID
-    #            0.01: "",  # 1%
-    #            0.001: "",  # 0.1%
-    #            0.0001: "",  # 0.01%
-    #            0.00001: "",  # 0.001%
-    #            0.000001: "",  # 0.0001%
-    #        }
-    #    },
+        "vit-s/16": {
+            # FG Fraction
+            1.00: {  # FG Percentage: 100%; FG Range: "0-100"
+                # BG Fraction:  RUN ID
+                0.01: "bxk80blj",  # 1%
+                0.001: "toh8jtig",  # 0.1%
+                0.0001: "6xcu727n",  # 0.01%
+                0.00001: "wwdnerzd",  # 0.001%
+                0.000001: "p2rs2wqi",  # 0.0001%
+            }
+        },
         "vit-b/16": {
             # FG Fraction
             0.10: {  # FG Percentage: 10%; FG Range: "0-10"
