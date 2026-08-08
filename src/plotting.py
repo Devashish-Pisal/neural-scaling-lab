@@ -162,7 +162,7 @@ def plot_fg_bg_heatmaps(df:DataFrame):
     df = df[(df["train_dataset_name"] == "fornet/all/cos")].copy()
     models = sorted(df["model_name"].unique())
     fg_order = [1.00, 0.50, 0.25, 0.10]
-    bg_order = [1.00, 0.50, 0.25, 0.10]
+    bg_order = [0.10, 0.25, 0.50, 1.00]
     n_models = len(models)
     ncols = min(3, n_models)
     nrows = math.ceil(n_models / ncols)
