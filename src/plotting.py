@@ -731,6 +731,91 @@ def plot_crossover_epoch_vs_dataset_fraction(df: DataFrame, crossover_metric: st
 
 
 
+def plot_crossover_vs_model_size(df: DataFrame, crossover_metric: str = "val_loss", normalize: bool = True):
+    """Line plot of crossover epoch vs model parameter count (log-x),
+    one line per dataset fraction. Mirrors the never-crossed handling
+    from plot_crossover_epoch_vs_dataset_fraction for consistency.
+    Reads parameter_count directly from df - scales to however many
+    models are present, no external EXPERIMENT_CONSTANTS dependency.
+    """
+    set_style()
+    crossover_col = f"crossover_epoch_{crossover_metric}"
+    if crossover_col not in df.columns:
+        raise ValueError(f"Crossover column '{crossover_col}' not found in database.")
+    if "parameter_count" not in df.columns:
+        raise ValueError("'parameter_count' column not found in database.")
+
+    fornet = df[df["train_dataset_name"] == "fornet/all/cos"].copy()
+    if fornet.empty:
+        raise ValueError("No ForNet runs found in database.")
+
+    fractions = sorted(fornet["train_dataset_fraction"].unique())
+    models = sorted(
+        fornet["model_name"].unique(),
+        key=lambda m: fornet.loc[fornet["model_name"] == m, "parameter_count"].iloc[0]
+    )
+    param_count = {m: fornet.loc[fornet["model_name"] == m, "parameter_count"].iloc[0] for m in models}
+
+    # Per (model, fraction): average crossover epoch across bg_range variants
+    # that actually crossed (value > 0); NaN if none of them ever crossed.
+    y_by_fraction = {}
+    for frac in fractions:
+        values = []
+        for m in models:
+            sub = fornet[(fornet["model_name"] == m) & (fornet["train_dataset_fraction"] == frac)]
+            valid = sub.loc[sub[crossover_col] > 0, crossover_col]
+            if len(valid) == 0:
+                values.append(np.nan)
+                continue
+            mean_epoch = valid.mean()
+            if normalize:
+                mean_epoch = mean_epoch / sub.iloc[0]["total_epochs"]
+            values.append(mean_epoch)
+        y_by_fraction[frac] = np.array(values, dtype=float)
+
+    all_valid = np.concatenate([v[~np.isnan(v)] for v in y_by_fraction.values()])
+    if all_valid.size == 0:
+        raise ValueError(f"No valid crossover epochs found for metric '{crossover_metric}'.")
+    y_max = all_valid.max()
+    y_never = y_max * 1.12
+
+    N = np.array([param_count[m] for m in models], dtype=float)
+    colors = sns.color_palette("colorblind", n_colors=len(fractions))
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    for i, frac in enumerate(fractions):
+        y = y_by_fraction[frac]
+        valid_mask = ~np.isnan(y)
+        ax.plot(N[valid_mask], y[valid_mask], marker="o", markersize=7, linewidth=2,
+                color=colors[i], label=f"D={frac:.2f}", zorder=3)
+        never_mask = ~valid_mask
+        if never_mask.any():
+            ax.scatter(N[never_mask], np.full(never_mask.sum(), y_never), marker="x",
+                       s=110, linewidth=2.5, color="#d62728", zorder=5)
+
+    ax.set_xscale("log")
+    ax.set_ylim(top=y_never * 1.12)
+    ax.set_xlabel("Model parameter count $N$ (log scale)")
+    ax.set_ylabel("Normalized crossover epoch" if normalize else "Crossover epoch")
+    metric_labels = {"val_loss": "Val Loss", "val_acc1": "Val Top-1 Acc", "val_acc5": "Val Top-5 Acc"}
+    ax.set_title(f"Crossover Speed vs. Model Size ({metric_labels.get(crossover_metric, crossover_metric)})")
+    ax.xaxis.set_major_locator(ticker.FixedLocator(sorted(N)))
+    ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{x/1e6:.1f}M"))
+    ax.xaxis.set_minor_locator(ticker.NullLocator())
+    ax.grid(True, which="major", ls="--", alpha=0.5)
+
+    handles, labels = ax.get_legend_handles_labels()
+    handles.append(Line2D([], [], marker="x", color="#d62728", ls="", markersize=8, markeredgewidth=2.5))
+    labels.append("No crossover (never beats ImageNet)")
+    ax.legend(handles, labels, fontsize=9, loc="best", framealpha=0.95)
+
+    fig.tight_layout()
+    fig.savefig(PDF_OUTPUTS_DIR / f"crossover_vs_model_size_{crossover_metric}.pdf")
+    fig.savefig(IMG_OUTPUT_DIR / f"crossover_vs_model_size_{crossover_metric}.png")
+    plt.show()
+
+
+
 def plot_scaling_law(df:DataFrame):
     datasets = df["train_dataset_name"].unique()
     if len(datasets) != 1:
