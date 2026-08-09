@@ -15,73 +15,11 @@ from configs.config import EXPERIMENT_CONSTANTS
 from matplotlib.lines import Line2D
 
 
-
-def set_style():
-    plt.style.use('seaborn-v0_8-whitegrid')
-    plt.rcParams.update({
-        'font.size': 12,
-        'axes.titlesize': 14,
-        'axes.labelsize': 13,
-        'legend.fontsize': 11,
-        'figure.dpi': 100,
-        'savefig.dpi': 300,
-        'savefig.bbox': 'tight',
-    })
-
-
-def calculate_fit(y_axis_values, x_axis_values):
-    log_y_values, log_x_values = np.log(y_axis_values), np.log(x_axis_values)
-    coefficients = np.polyfit(log_x_values, log_y_values, 1)
-    fit = np.exp(coefficients[1]) * x_axis_values ** coefficients[0]
-    return coefficients, fit
-
-
-def plot_scaling_law(df:DataFrame):
-    datasets = df["train_dataset_name"].unique()
-    if len(datasets) != 1:
-        raise ValueError(f"Dataframe must contain data of only one dataset | Found {datasets}")
-    models = df["model_name"].unique()
-    dataset_name = None
-    if datasets[0] == "fornet/all/cos":
-        dataset_name = "ForNet"
-    elif datasets[0] == "fornet/all/1.0":
-        dataset_name = "ImageNet"
-    else:
-        raise ValueError(f"Unknown train_dataset_name in database | train_dataset_name: {datasets[0]}")
-    fig, ax = plt.subplots(figsize=(15, 10))
-    colors = plt.cm.viridis(np.linspace(0, 1, len(models)))
-    for i, model in enumerate(models):
-        filtered_df = filter_database(input_dataframe=df, model_name=model)
-        if datasets[0] == "fornet/all/cos":
-            filtered_df = filter_database(input_dataframe=filtered_df, bg_range="0-100")
-        assert len(filtered_df) == 4
-        filtered_df = filtered_df.sort_values("train_dataset_fraction", ascending=True)
-        D = filtered_df["train_dataset_fraction"]
-        loss = filtered_df["min_val_loss"]
-        line, = ax.loglog(D, loss, 'o-', color=colors[i], markersize=8, label=f"{model} val/loss")
-        coeffs, fit = calculate_fit(loss, D)
-        '''
-        # Power‑law fit
-        log_D, log_L = np.log(D), np.log(loss)
-        coeffs = np.polyfit(log_D, log_L, 1)
-        fit = np.exp(coeffs[1]) * D ** coeffs[0]
-        '''
-        ax.loglog(D, fit, '--', color=line.get_color(), alpha=0.7,
-                  label=f'{model} Fit: $L \\propto D^{{{coeffs[0]:.2f}}}$')
-    if datasets[0] == "fornet/all/cos":
-        ax = show_exact_values(ax, filter_database(input_dataframe=df, bg_range="0-100")["min_val_loss"], "y")
-    else: # "fornet/all/1.0"
-        ax = show_exact_values(ax, df["min_val_loss"], "y")
-    ax = show_exact_values(ax, [0.10, 0.25, 0.50, 1.00], "x")
-    ax.grid(True, which='major', ls='--', alpha=0.5)
-    ax.set_xlabel('Dataset fraction $D$')
-    ax.set_ylabel('Validation loss $L$')
-    ax.set_title(f'{dataset_name} Scaling Law: Loss vs Dataset Size')
-    ax.legend()
-    plt.tight_layout()
-    fig.savefig(PDF_OUTPUTS_DIR / f"{dataset_name.lower()}_scaling_law.pdf")
-    fig.savefig(IMG_OUTPUT_DIR / f"{dataset_name.lower()}_scaling_law.png")
-    plt.show()
+_MODEL_SIZE_ORDER = ["ViT-Ti/16", "ViT-S/16", "ViT-S/32", "ViT-B/16", "ViT-B/28"]
+_DATASET_LABELS = {
+    "fornet/all/cos": ("Cosine mixing", "o", "#1f77b4"),
+    "fornet/all/0.0": ("No mixing (0.0)", "s", "#d62728"),
+}
 
 
 
@@ -216,6 +154,7 @@ def plot_fg_bg_heatmaps(df:DataFrame):
     plt.show()
 
 
+
 def plot_fornet_vs_imagenet_delta_gain(df: DataFrame) -> None:
     data = df.copy()
     data["bg_range"] = data["bg_range"].fillna("null").astype(str).str.lower()
@@ -347,259 +286,6 @@ def plot_fornet_vs_imagenet_delta_gain(df: DataFrame) -> None:
     plt.show()
 
 
-'''
-# Due to time limit studying crossover phenomenon is outside thesis scope 
-def plot_crossover_flops_scaling(df: DataFrame, crossover_metric: str = "val_loss"):
-    set_style()
-    # Crossover epochs are only defined relative to ForNet for ImageNet runs
-    crossover_col = f"crossover_epoch_{crossover_metric}"
-    if crossover_col not in df.columns:
-        raise ValueError(f"Crossover column '{crossover_col}' not found in database. "
-                         f"Available columns: {list(df.columns)}")
-    # Filter for ImageNet dataset where crossover epoch is valid (> 0)
-    filtered_df = df[
-        (df["train_dataset_name"] == "fornet/all/1.0") &
-        (df[crossover_col] > 0)
-    ].copy()
-    models = sorted(filtered_df["model_name"].unique())
-    n_models = len(models)
-    if n_models == 0:
-        raise ValueError(f"No runs with valid crossover epochs found in database for metric '{crossover_metric}'")
-    fig, axes = plt.subplots(
-        1,
-        n_models,
-        figsize=(6 * n_models, 5),
-        squeeze=False
-    )
-    axes = axes[0]  # Flatten to 1D array of axes
-    for i, model in enumerate(models):
-        ax = axes[i]
-        model_df = filtered_df[filtered_df["model_name"] == model].sort_values("train_dataset_size")
-        if model_df.empty:
-            continue
-        D = model_df["train_dataset_size"].values.astype(float)
-        crossover_epochs = model_df[crossover_col].values.astype(float)
-        flops_per_epoch = model_df["flops_per_epoch"].values.astype(float)
-        # Crossover FLOPs = Crossover Epoch * FLOPs per epoch
-        crossover_flops = crossover_epochs * flops_per_epoch
-        # Plot data points (markers only)
-        line, = ax.loglog(D, crossover_flops, 'o', color=f'C{i}', markersize=8, label='Crossover FLOPs data')
-        # Calculate fit
-        coeffs, fit = calculate_fit(crossover_flops, D)
-        b = coeffs[0]  # exponent
-        a = np.exp(coeffs[1])  # prefactor
-        # Calculate fit quality R^2 in log space
-        log_D = np.log(D)
-        log_crossover_flops = np.log(crossover_flops)
-        pred = coeffs[0] * log_D + coeffs[1]
-        ss_res = np.sum((log_crossover_flops - pred) ** 2)
-        ss_tot = np.sum((log_crossover_flops - np.mean(log_crossover_flops)) ** 2)
-        r2 = 1.0 - (ss_res / ss_tot)
-        # Plot power-law fit line
-        ax.loglog(D, fit, '--', color=line.get_color(), alpha=0.7,
-                  label=rf'Fit: $C_{{\text{{cross}}}} = {a:.2e} \cdot D^{{{b:.2f}}}$ ($R^2 = {r2:.4f}$)')
-        # Configure subplot
-        ax.set_title(f'{model}')
-        ax.set_xlabel('Training dataset samples $D$')
-        ax.grid(True, which='major', ls='--', alpha=0.5)
-        ax.legend(loc='best', frameon=True)
-        # Set exact x values as ticks
-        show_exact_values(ax, D, "x")
-        # Set exact y values corresponding to data points as ticks
-        ax.yaxis.set_major_locator(ticker.FixedLocator(crossover_flops))
-        ax.yaxis.set_major_formatter(
-            ticker.FuncFormatter(lambda y, _: f'{y:.2e}')
-        )
-        ax.yaxis.set_minor_locator(ticker.NullLocator())
-    axes[0].set_ylabel('Crossover FLOPs $C_{\\text{cross}}$')
-    fig.suptitle(f'Crossover FLOPs Scaling Law ({crossover_metric.replace("_", " ").title()})', fontsize=15, y=0.98)
-    plt.tight_layout()
-    # Save the plots
-    pdf_path = PDF_OUTPUTS_DIR / f'crossover_flops_{crossover_metric}_scaling.pdf'
-    png_path = IMG_OUTPUT_DIR / f'crossover_flops_{crossover_metric}_scaling.png'
-    fig.savefig(pdf_path)
-    fig.savefig(png_path)
-    plt.show()
-'''
-
-
-_MODEL_SIZE_ORDER = ["ViT-Ti/16", "ViT-S/16", "ViT-S/32", "ViT-B/16", "ViT-B/28"]
-def plot_crossover_epoch_vs_dataset_fraction(df: DataFrame, crossover_metric: str = "val_loss") -> None:
-    """Line plot of crossover epoch vs. dataset fraction, one line per model.
-
-    For each (model, fg_range) the crossover epoch is averaged across the
-    ForNet runs' bg_range variants (crossover is stored per ForNet run,
-    relative to the matched ImageNet run at the same fraction). Points where
-    none of the bg_range variants ever cross ImageNet are drawn as an
-    explicit red "X" at the top of the plot rather than left as a gap.
-    """
-    set_style()
-    crossover_col = f"crossover_epoch_{crossover_metric}"
-    if crossover_col not in df.columns:
-        raise ValueError(f"Crossover column '{crossover_col}' not found in database. "
-                         f"Available columns: {list(df.columns)}")
-    fornet = df[df["train_dataset_name"] == "fornet/all/cos"].copy()
-    if fornet.empty:
-        raise ValueError("No ForNet runs found in database.")
-
-    fractions = [0.10, 0.25, 0.50, 1.00]
-    models = sorted(
-        fornet["model_name"].unique(),
-        key=lambda m: _MODEL_SIZE_ORDER.index(m) if m in _MODEL_SIZE_ORDER else len(_MODEL_SIZE_ORDER)
-    )
-
-    # For each model x fraction, average the crossover epoch across bg_range
-    # variants that actually crossed (crossover_col > 0); -1 means that
-    # particular bg_range never crossed. A fraction is "never" only if none
-    # of its bg_range variants crossed.
-    epochs_by_model = {}
-    for model in models:
-        model_df = fornet[fornet["model_name"] == model]
-        values = []
-        for frac in fractions:
-            frac_df = model_df[model_df["train_dataset_fraction"] == frac]
-            valid = frac_df.loc[frac_df[crossover_col] > 0, crossover_col]
-            mean = valid.mean() if len(valid) > 0 else np.nan
-            normalized_epoch = mean / frac_df.iloc[0]["total_epochs"] if mean is not np.nan else np.nan
-            values.append(normalized_epoch)
-        epochs_by_model[model] = np.array(values, dtype=float)
-
-    all_valid = np.concatenate([v[~np.isnan(v)] for v in epochs_by_model.values()])
-    if all_valid.size == 0:
-        raise ValueError(f"No valid crossover epochs found for metric '{crossover_metric}'")
-    y_max = all_valid.max()
-    y_never = y_max * 1.12  # marker row for "never crossed" points, above all real data
-
-    metric_labels = {
-        "val_loss": ("Val Loss", "drops below"),
-        "val_acc1": ("Val Top-1 Accuracy", "rises above"),
-        "val_acc5": ("Val Top-5 Accuracy", "rises above"),
-    }
-    metric_title, direction = metric_labels.get(crossover_metric, (crossover_metric, "crosses"))
-
-    # Publication-friendly, colorblind-safe categorical palette, fixed order per model.
-    colors = sns.color_palette("colorblind", n_colors=len(models))
-
-    fig, ax = plt.subplots(figsize=(7, 5.5))
-    for i, model in enumerate(models):
-        y = epochs_by_model[model]
-        valid_mask = ~np.isnan(y)
-        ax.plot(
-            np.array(fractions)[valid_mask], y[valid_mask],
-            marker='o', markersize=7, linewidth=2, color=colors[i],
-            label=model, zorder=3,
-        )
-        never_mask = ~valid_mask
-        if never_mask.any():
-            never_x = np.array(fractions)[never_mask]
-            ax.scatter(
-                never_x, np.full(never_x.shape, y_never),
-                marker='x', s=110, linewidth=2.5, color='#d62728',
-                zorder=5,
-            )
-            for nx in never_x:
-                ax.annotate(
-                    "never", (nx, y_never), textcoords="offset points",
-                    xytext=(0, 6), ha="center", fontsize=8.5, color='#d62728', fontweight="bold",
-                )
-
-    ax.set_ylim(top=y_never * 1.12)
-    ax.set_xlabel("Dataset fraction $D$")
-    ax.set_ylabel(f"Crossover epoch (ForNet {direction} ImageNet)")
-    ax.set_title(f"Crossover Speed vs. Dataset Fraction ({metric_title})")
-    ax.set_xticks(fractions)
-    ax.set_xticklabels([f"{f:.2f}" for f in fractions])
-    ax.grid(True, which='major', ls='--', alpha=0.5)
-
-    handles, labels = ax.get_legend_handles_labels()
-    handles.append(Line2D([], [], marker='x', color='#d62728', ls='', markersize=8, markeredgewidth=2.5))
-    labels.append("No crossover (ForNet never beats ImageNet)")
-    ax.legend(handles, labels, fontsize=9, loc='best', framealpha=0.95)
-
-    plt.tight_layout()
-    fig.savefig(PDF_OUTPUTS_DIR / f'crossover_speed_{crossover_metric}.pdf')
-    fig.savefig(IMG_OUTPUT_DIR / f'crossover_speed_{crossover_metric}.png')
-    plt.show()
-
-
-def plot_flops_scaling_comparison(df: DataFrame):
-    set_style()
-
-    df = df[df["bg_range"].isin(["0-100", None])].copy()
-    df["architecture"] = df["model_name"].str.split("/").str[0]
-    df["patch_size"] = df["model_name"].str.split("/").str[1]
-
-    architectures = sorted(df["architecture"].unique())
-
-    patch_colors = {"16": "#1f77b4", "28": "#2ca02c", "32": "#d62728"}
-    datasets = {
-        "fornet/all/1.0": ("ImageNet", "o"),
-        "fornet/all/cos": ("ForNet", "s"),
-    }
-
-    ncols = 3
-    nrows = math.ceil(len(architectures) / ncols)
-    fig, axes = plt.subplots(
-        nrows,
-        ncols,
-        figsize=(8 * ncols, 6 * nrows),
-        sharey=True,
-    )
-    axes = np.atleast_1d(axes).ravel()
-    for ax, arch in zip(axes, architectures):
-        arch_df = df[df["architecture"] == arch]
-        for patch in sorted(arch_df["patch_size"].unique(), key=int):
-            patch_df = arch_df[arch_df["patch_size"] == patch]
-            color = patch_colors.get(patch, "black")
-            for dataset_name, (dataset_label, marker) in datasets.items():
-                current_df = patch_df[patch_df["train_dataset_name"] == dataset_name]
-                if len(current_df) < 2:
-                    continue
-                current_df = current_df.sort_values("total_flops")
-                C = current_df["total_flops"].to_numpy(float)
-                L = current_df["min_val_loss"].to_numpy(float)
-                coeffs, fit = calculate_fit(L, C)
-                alpha, a = coeffs[0], np.exp(coeffs[1])
-                pred = coeffs[0] * np.log(C) + coeffs[1]
-                r2 = 1 - np.sum((np.log(L) - pred) ** 2) / np.sum((np.log(L) - np.mean(np.log(L))) ** 2)
-                ax.scatter(
-                    C, L, s=70, marker=marker, color=color,
-                    edgecolor="white", linewidth=0.8, zorder=3
-                )
-                ax.loglog(
-                    C, fit, "--", color=color, lw=1.5,
-                    label=rf"P{patch} {dataset_label}: $L={a:.2e}C^{{{alpha:.2f}}}$ ($R^2={r2:.3f}$)"
-                )
-        ax.set_title(arch, fontsize=13, fontweight="bold")
-        ax.set_xlabel("Training compute (FLOPs) $C$")
-        ax.grid(True, which="major", ls="--", alpha=0.35)
-        ax.grid(True, which="minor", ls=":", alpha=0.15)
-        # Auto log ticks can collapse to <4 labels when a single patch size's
-        # FLOPs span less than a decade, so pin ticks to the actual FLOPs
-        # values present (>=4, since every model has 4 dataset fractions).
-        flop_ticks = sorted(float(v) for v in arch_df["total_flops"].unique())
-        ax.xaxis.set_major_locator(ticker.FixedLocator(flop_ticks))
-        ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f'{x / 1e18:.2f}e18'))
-        ax.xaxis.set_minor_locator(ticker.NullLocator())
-        plt.setp(ax.get_xticklabels(), rotation=40, ha="right", fontsize=9)
-        handles, labels = ax.get_legend_handles_labels()
-        handles += [
-            Line2D([], [], marker="o", color="black", ls="", markersize=7),
-            Line2D([], [], marker="s", color="black", ls="", markersize=7),
-        ]
-        labels += ["ImageNet", "ForNet"]
-        ax.legend(handles, labels, fontsize=8, loc="best", framealpha=0.95)
-    for ax in axes[len(architectures):]:
-        fig.delaxes(ax)
-    for ax in axes[::ncols]:
-        if ax in fig.axes:
-            ax.set_ylabel("Validation loss $L$")
-    fig.suptitle("Compute (FLOPs) Scaling Laws", fontsize=16, fontweight="bold")
-    fig.tight_layout()
-    fig.savefig(PDF_OUTPUTS_DIR / "flops_scaling_comparison.pdf")
-    fig.savefig(IMG_OUTPUT_DIR / "flops_scaling_comparison.png")
-    plt.show()
-
 
 def plot_model_scaling_comparison(df: DataFrame):
     set_style()
@@ -723,6 +409,318 @@ def plot_model_scaling_comparison(df: DataFrame):
     plt.show()
 
 
+
+def plot_flops_scaling_comparison(df: DataFrame):
+    set_style()
+
+    df = df[df["bg_range"].isin(["0-100", None])].copy()
+    df["architecture"] = df["model_name"].str.split("/").str[0]
+    df["patch_size"] = df["model_name"].str.split("/").str[1]
+
+    architectures = sorted(df["architecture"].unique())
+
+    patch_colors = {"16": "#1f77b4", "28": "#2ca02c", "32": "#d62728"}
+    datasets = {
+        "fornet/all/1.0": ("ImageNet", "o"),
+        "fornet/all/cos": ("ForNet", "s"),
+    }
+
+    ncols = 3
+    nrows = math.ceil(len(architectures) / ncols)
+    fig, axes = plt.subplots(
+        nrows,
+        ncols,
+        figsize=(8 * ncols, 6 * nrows),
+        sharey=True,
+    )
+    axes = np.atleast_1d(axes).ravel()
+    for ax, arch in zip(axes, architectures):
+        arch_df = df[df["architecture"] == arch]
+        for patch in sorted(arch_df["patch_size"].unique(), key=int):
+            patch_df = arch_df[arch_df["patch_size"] == patch]
+            color = patch_colors.get(patch, "black")
+            for dataset_name, (dataset_label, marker) in datasets.items():
+                current_df = patch_df[patch_df["train_dataset_name"] == dataset_name]
+                if len(current_df) < 2:
+                    continue
+                current_df = current_df.sort_values("total_flops")
+                C = current_df["total_flops"].to_numpy(float)
+                L = current_df["min_val_loss"].to_numpy(float)
+                coeffs, fit = calculate_fit(L, C)
+                alpha, a = coeffs[0], np.exp(coeffs[1])
+                pred = coeffs[0] * np.log(C) + coeffs[1]
+                r2 = 1 - np.sum((np.log(L) - pred) ** 2) / np.sum((np.log(L) - np.mean(np.log(L))) ** 2)
+                ax.scatter(
+                    C, L, s=70, marker=marker, color=color,
+                    edgecolor="white", linewidth=0.8, zorder=3
+                )
+                ax.loglog(
+                    C, fit, "--", color=color, lw=1.5,
+                    label=rf"P{patch} {dataset_label}: $L={a:.2e}C^{{{alpha:.2f}}}$ ($R^2={r2:.3f}$)"
+                )
+        ax.set_title(arch, fontsize=13, fontweight="bold")
+        ax.set_xlabel("Training compute (FLOPs) $C$")
+        ax.grid(True, which="major", ls="--", alpha=0.35)
+        ax.grid(True, which="minor", ls=":", alpha=0.15)
+        # Auto log ticks can collapse to <4 labels when a single patch size's
+        # FLOPs span less than a decade, so pin ticks to the actual FLOPs
+        # values present (>=4, since every model has 4 dataset fractions).
+        flop_ticks = sorted(float(v) for v in arch_df["total_flops"].unique())
+        ax.xaxis.set_major_locator(ticker.FixedLocator(flop_ticks))
+        ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f'{x / 1e18:.2f}e18'))
+        ax.xaxis.set_minor_locator(ticker.NullLocator())
+        plt.setp(ax.get_xticklabels(), rotation=40, ha="right", fontsize=9)
+        handles, labels = ax.get_legend_handles_labels()
+        handles += [
+            Line2D([], [], marker="o", color="black", ls="", markersize=7),
+            Line2D([], [], marker="s", color="black", ls="", markersize=7),
+        ]
+        labels += ["ImageNet", "ForNet"]
+        ax.legend(handles, labels, fontsize=8, loc="best", framealpha=0.95)
+    for ax in axes[len(architectures):]:
+        fig.delaxes(ax)
+    for ax in axes[::ncols]:
+        if ax in fig.axes:
+            ax.set_ylabel("Validation loss $L$")
+    fig.suptitle("Compute (FLOPs) Scaling Laws", fontsize=16, fontweight="bold")
+    fig.tight_layout()
+    fig.savefig(PDF_OUTPUTS_DIR / "flops_scaling_comparison.pdf")
+    fig.savefig(IMG_OUTPUT_DIR / "flops_scaling_comparison.png")
+    plt.show()
+
+
+
+def plot_extreme_bg_threshold(df: DataFrame, metric: str = "max_val_acc1"):
+    """Line plot of `metric` vs bg_fraction (log-x) from the extreme
+    background-pool ablation runs. One subplot per (model, fg_range)
+    combination actually present in df, one line per mixing schedule
+    (train_dataset_name). No hardcoded model list or run count - scales
+    to however many models/fg_ranges/schedules are in the dataframe.
+    Unknown dataset_name values still plot (fallback marker/color),
+    they just won't get a pretty label from _DATASET_LABELS.
+    """
+    set_style()
+    df = df.copy()
+    if metric not in ("max_val_acc1", "min_val_loss"):
+        raise ValueError(f"Unsupported metric '{metric}'. Use 'max_val_acc1' or 'min_val_loss'.")
+    if "bg_fraction" not in df.columns:
+        raise ValueError("'bg_fraction' column not found in dataframe.")
+
+    groups = sorted(
+        df[["model_name", "fg_range"]].drop_duplicates().itertuples(index=False, name=None)
+    )
+    n = len(groups)
+    if n == 0:
+        raise ValueError("No (model_name, fg_range) groups found in dataframe.")
+
+    ncols = min(3, n)
+    nrows = math.ceil(n / ncols)
+    fig, axes = plt.subplots(nrows, ncols, figsize=(7 * ncols, 5.5 * nrows), squeeze=False)
+    axes = axes.ravel()
+    y_label = "Top-1 Validation Accuracy" if metric == "max_val_acc1" else "Validation Loss"
+
+    for ax, (model, fg_range) in zip(axes, groups):
+        sub = df[(df["model_name"] == model) & (df["fg_range"] == fg_range)]
+        for dataset_name in sorted(sub["train_dataset_name"].unique()):
+            label, marker, color = _DATASET_LABELS.get(dataset_name, (dataset_name, "^", None))
+            line_df = sub[sub["train_dataset_name"] == dataset_name].sort_values("bg_fraction")
+            if len(line_df) < 2:
+                # Not enough points to draw a line - still show them as markers.
+                ax.scatter(line_df["bg_fraction"], line_df[metric], marker=marker,
+                           color=color, s=60, label=label, zorder=3)
+                continue
+            ax.plot(line_df["bg_fraction"], line_df[metric], marker=marker, color=color,
+                    markersize=7, linewidth=1.8, label=label, zorder=3)
+        ax.set_xscale("log")
+        ax.set_xlabel("Background fraction (log scale)")
+        ax.set_ylabel(y_label)
+        ax.set_title(f"{model} | fg_range={fg_range}", fontsize=12, fontweight="bold")
+        ax.grid(True, which="major", ls="--", alpha=0.4)
+        ax.grid(True, which="minor", ls=":", alpha=0.15)
+        ax.legend(fontsize=9, loc="best", framealpha=0.95)
+
+    for ax in axes[n:]:
+        fig.delaxes(ax)
+
+    fig.suptitle("Extreme Background Pool Ablation", fontsize=15, fontweight="bold")
+    fig.tight_layout()
+    fig.savefig(PDF_OUTPUTS_DIR / f"extreme_bg_threshold_{metric}.pdf")
+    fig.savefig(IMG_OUTPUT_DIR / f"extreme_bg_threshold_{metric}.png")
+    plt.show()
+
+
+
+
+
+def plot_crossover_epoch_vs_dataset_fraction(df: DataFrame, crossover_metric: str = "val_loss") -> None:
+    """Line plot of crossover epoch vs. dataset fraction, one line per model.
+
+    For each (model, fg_range) the crossover epoch is averaged across the
+    ForNet runs' bg_range variants (crossover is stored per ForNet run,
+    relative to the matched ImageNet run at the same fraction). Points where
+    none of the bg_range variants ever cross ImageNet are drawn as an
+    explicit red "X" at the top of the plot rather than left as a gap.
+    """
+    set_style()
+    crossover_col = f"crossover_epoch_{crossover_metric}"
+    if crossover_col not in df.columns:
+        raise ValueError(f"Crossover column '{crossover_col}' not found in database. "
+                         f"Available columns: {list(df.columns)}")
+    fornet = df[df["train_dataset_name"] == "fornet/all/cos"].copy()
+    if fornet.empty:
+        raise ValueError("No ForNet runs found in database.")
+
+    fractions = [0.10, 0.25, 0.50, 1.00]
+    models = sorted(
+        fornet["model_name"].unique(),
+        key=lambda m: _MODEL_SIZE_ORDER.index(m) if m in _MODEL_SIZE_ORDER else len(_MODEL_SIZE_ORDER)
+    )
+
+    # For each model x fraction, average the crossover epoch across bg_range
+    # variants that actually crossed (crossover_col > 0); -1 means that
+    # particular bg_range never crossed. A fraction is "never" only if none
+    # of its bg_range variants crossed.
+    epochs_by_model = {}
+    for model in models:
+        model_df = fornet[fornet["model_name"] == model]
+        values = []
+        for frac in fractions:
+            frac_df = model_df[model_df["train_dataset_fraction"] == frac]
+            valid = frac_df.loc[frac_df[crossover_col] > 0, crossover_col]
+            mean = valid.mean() if len(valid) > 0 else np.nan
+            normalized_epoch = mean / frac_df.iloc[0]["total_epochs"] if mean is not np.nan else np.nan
+            values.append(normalized_epoch)
+        epochs_by_model[model] = np.array(values, dtype=float)
+
+    all_valid = np.concatenate([v[~np.isnan(v)] for v in epochs_by_model.values()])
+    if all_valid.size == 0:
+        raise ValueError(f"No valid crossover epochs found for metric '{crossover_metric}'")
+    y_max = all_valid.max()
+    y_never = y_max * 1.12  # marker row for "never crossed" points, above all real data
+
+    metric_labels = {
+        "val_loss": ("Val Loss", "drops below"),
+        "val_acc1": ("Val Top-1 Accuracy", "rises above"),
+        "val_acc5": ("Val Top-5 Accuracy", "rises above"),
+    }
+    metric_title, direction = metric_labels.get(crossover_metric, (crossover_metric, "crosses"))
+
+    # Publication-friendly, colorblind-safe categorical palette, fixed order per model.
+    colors = sns.color_palette("colorblind", n_colors=len(models))
+
+    fig, ax = plt.subplots(figsize=(7, 5.5))
+    for i, model in enumerate(models):
+        y = epochs_by_model[model]
+        valid_mask = ~np.isnan(y)
+        ax.plot(
+            np.array(fractions)[valid_mask], y[valid_mask],
+            marker='o', markersize=7, linewidth=2, color=colors[i],
+            label=model, zorder=3,
+        )
+        never_mask = ~valid_mask
+        if never_mask.any():
+            never_x = np.array(fractions)[never_mask]
+            ax.scatter(
+                never_x, np.full(never_x.shape, y_never),
+                marker='x', s=110, linewidth=2.5, color='#d62728',
+                zorder=5,
+            )
+            for nx in never_x:
+                ax.annotate(
+                    "never", (nx, y_never), textcoords="offset points",
+                    xytext=(0, 6), ha="center", fontsize=8.5, color='#d62728', fontweight="bold",
+                )
+
+    ax.set_ylim(top=y_never * 1.12)
+    ax.set_xlabel("Dataset fraction $D$")
+    ax.set_ylabel(f"Crossover epoch (ForNet {direction} ImageNet)")
+    ax.set_title(f"Crossover Speed vs. Dataset Fraction ({metric_title})")
+    ax.set_xticks(fractions)
+    ax.set_xticklabels([f"{f:.2f}" for f in fractions])
+    ax.grid(True, which='major', ls='--', alpha=0.5)
+
+    handles, labels = ax.get_legend_handles_labels()
+    handles.append(Line2D([], [], marker='x', color='#d62728', ls='', markersize=8, markeredgewidth=2.5))
+    labels.append("No crossover (ForNet never beats ImageNet)")
+    ax.legend(handles, labels, fontsize=9, loc='best', framealpha=0.95)
+
+    plt.tight_layout()
+    fig.savefig(PDF_OUTPUTS_DIR / f'crossover_speed_{crossover_metric}.pdf')
+    fig.savefig(IMG_OUTPUT_DIR / f'crossover_speed_{crossover_metric}.png')
+    plt.show()
+
+
+
+def plot_scaling_law(df:DataFrame):
+    datasets = df["train_dataset_name"].unique()
+    if len(datasets) != 1:
+        raise ValueError(f"Dataframe must contain data of only one dataset | Found {datasets}")
+    models = df["model_name"].unique()
+    dataset_name = None
+    if datasets[0] == "fornet/all/cos":
+        dataset_name = "ForNet"
+    elif datasets[0] == "fornet/all/1.0":
+        dataset_name = "ImageNet"
+    else:
+        raise ValueError(f"Unknown train_dataset_name in database | train_dataset_name: {datasets[0]}")
+    fig, ax = plt.subplots(figsize=(15, 10))
+    colors = plt.cm.viridis(np.linspace(0, 1, len(models)))
+    for i, model in enumerate(models):
+        filtered_df = filter_database(input_dataframe=df, model_name=model)
+        if datasets[0] == "fornet/all/cos":
+            filtered_df = filter_database(input_dataframe=filtered_df, bg_range="0-100")
+        assert len(filtered_df) == 4
+        filtered_df = filtered_df.sort_values("train_dataset_fraction", ascending=True)
+        D = filtered_df["train_dataset_fraction"]
+        loss = filtered_df["min_val_loss"]
+        line, = ax.loglog(D, loss, 'o-', color=colors[i], markersize=8, label=f"{model} val/loss")
+        coeffs, fit = calculate_fit(loss, D)
+        '''
+        # Power‑law fit
+        log_D, log_L = np.log(D), np.log(loss)
+        coeffs = np.polyfit(log_D, log_L, 1)
+        fit = np.exp(coeffs[1]) * D ** coeffs[0]
+        '''
+        ax.loglog(D, fit, '--', color=line.get_color(), alpha=0.7,
+                  label=f'{model} Fit: $L \\propto D^{{{coeffs[0]:.2f}}}$')
+    if datasets[0] == "fornet/all/cos":
+        ax = show_exact_values(ax, filter_database(input_dataframe=df, bg_range="0-100")["min_val_loss"], "y")
+    else: # "fornet/all/1.0"
+        ax = show_exact_values(ax, df["min_val_loss"], "y")
+    ax = show_exact_values(ax, [0.10, 0.25, 0.50, 1.00], "x")
+    ax.grid(True, which='major', ls='--', alpha=0.5)
+    ax.set_xlabel('Dataset fraction $D$')
+    ax.set_ylabel('Validation loss $L$')
+    ax.set_title(f'{dataset_name} Scaling Law: Loss vs Dataset Size')
+    ax.legend()
+    plt.tight_layout()
+    fig.savefig(PDF_OUTPUTS_DIR / f"{dataset_name.lower()}_scaling_law.pdf")
+    fig.savefig(IMG_OUTPUT_DIR / f"{dataset_name.lower()}_scaling_law.png")
+    plt.show()
+
+
+
+def set_style():
+    plt.style.use('seaborn-v0_8-whitegrid')
+    plt.rcParams.update({
+        'font.size': 12,
+        'axes.titlesize': 14,
+        'axes.labelsize': 13,
+        'legend.fontsize': 11,
+        'figure.dpi': 100,
+        'savefig.dpi': 300,
+        'savefig.bbox': 'tight',
+    })
+
+
+def calculate_fit(y_axis_values, x_axis_values):
+    log_y_values, log_x_values = np.log(y_axis_values), np.log(x_axis_values)
+    coefficients = np.polyfit(log_x_values, log_y_values, 1)
+    fit = np.exp(coefficients[1]) * x_axis_values ** coefficients[0]
+    return coefficients, fit
+
+
+
 def show_exact_values(ax, values, axis:str):
     if axis == "x":
         # X axis: exact dataset sizes
@@ -740,3 +738,78 @@ def show_exact_values(ax, values, axis:str):
         ax.yaxis.set_minor_locator(ticker.NullLocator())  # Remove any minor ticks (which often carry default labels)
     return ax
 
+
+'''
+# Due to time limit studying crossover phenomenon is outside thesis scope 
+def plot_crossover_flops_scaling(df: DataFrame, crossover_metric: str = "val_loss"):
+    set_style()
+    # Crossover epochs are only defined relative to ForNet for ImageNet runs
+    crossover_col = f"crossover_epoch_{crossover_metric}"
+    if crossover_col not in df.columns:
+        raise ValueError(f"Crossover column '{crossover_col}' not found in database. "
+                         f"Available columns: {list(df.columns)}")
+    # Filter for ImageNet dataset where crossover epoch is valid (> 0)
+    filtered_df = df[
+        (df["train_dataset_name"] == "fornet/all/1.0") &
+        (df[crossover_col] > 0)
+    ].copy()
+    models = sorted(filtered_df["model_name"].unique())
+    n_models = len(models)
+    if n_models == 0:
+        raise ValueError(f"No runs with valid crossover epochs found in database for metric '{crossover_metric}'")
+    fig, axes = plt.subplots(
+        1,
+        n_models,
+        figsize=(6 * n_models, 5),
+        squeeze=False
+    )
+    axes = axes[0]  # Flatten to 1D array of axes
+    for i, model in enumerate(models):
+        ax = axes[i]
+        model_df = filtered_df[filtered_df["model_name"] == model].sort_values("train_dataset_size")
+        if model_df.empty:
+            continue
+        D = model_df["train_dataset_size"].values.astype(float)
+        crossover_epochs = model_df[crossover_col].values.astype(float)
+        flops_per_epoch = model_df["flops_per_epoch"].values.astype(float)
+        # Crossover FLOPs = Crossover Epoch * FLOPs per epoch
+        crossover_flops = crossover_epochs * flops_per_epoch
+        # Plot data points (markers only)
+        line, = ax.loglog(D, crossover_flops, 'o', color=f'C{i}', markersize=8, label='Crossover FLOPs data')
+        # Calculate fit
+        coeffs, fit = calculate_fit(crossover_flops, D)
+        b = coeffs[0]  # exponent
+        a = np.exp(coeffs[1])  # prefactor
+        # Calculate fit quality R^2 in log space
+        log_D = np.log(D)
+        log_crossover_flops = np.log(crossover_flops)
+        pred = coeffs[0] * log_D + coeffs[1]
+        ss_res = np.sum((log_crossover_flops - pred) ** 2)
+        ss_tot = np.sum((log_crossover_flops - np.mean(log_crossover_flops)) ** 2)
+        r2 = 1.0 - (ss_res / ss_tot)
+        # Plot power-law fit line
+        ax.loglog(D, fit, '--', color=line.get_color(), alpha=0.7,
+                  label=rf'Fit: $C_{{\text{{cross}}}} = {a:.2e} \cdot D^{{{b:.2f}}}$ ($R^2 = {r2:.4f}$)')
+        # Configure subplot
+        ax.set_title(f'{model}')
+        ax.set_xlabel('Training dataset samples $D$')
+        ax.grid(True, which='major', ls='--', alpha=0.5)
+        ax.legend(loc='best', frameon=True)
+        # Set exact x values as ticks
+        show_exact_values(ax, D, "x")
+        # Set exact y values corresponding to data points as ticks
+        ax.yaxis.set_major_locator(ticker.FixedLocator(crossover_flops))
+        ax.yaxis.set_major_formatter(
+            ticker.FuncFormatter(lambda y, _: f'{y:.2e}')
+        )
+        ax.yaxis.set_minor_locator(ticker.NullLocator())
+    axes[0].set_ylabel('Crossover FLOPs $C_{\\text{cross}}$')
+    fig.suptitle(f'Crossover FLOPs Scaling Law ({crossover_metric.replace("_", " ").title()})', fontsize=15, y=0.98)
+    plt.tight_layout()
+    # Save the plots
+    pdf_path = PDF_OUTPUTS_DIR / f'crossover_flops_{crossover_metric}_scaling.pdf'
+    png_path = IMG_OUTPUT_DIR / f'crossover_flops_{crossover_metric}_scaling.png'
+    fig.savefig(pdf_path)
+    fig.savefig(png_path)
+    plt.show()
+'''
