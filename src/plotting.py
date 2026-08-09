@@ -131,6 +131,8 @@ def plot_fg_bg_heatmaps(df:DataFrame):
             origin="upper",
             aspect="auto"
         )
+        ax.grid(False)
+
         for i in range(4):
             for j in range(4):
                 value = heatmap[i, j]
@@ -549,6 +551,84 @@ def plot_extreme_bg_threshold(df: DataFrame, metric: str = "max_val_acc1"):
     plt.show()
 
 
+
+def plot_delta_gain_heatmap(df: DataFrame, metric: str = "max_val_acc1", bg_range: str = "0-100"):
+    """Single heatmap of (ForNet - ImageNet) delta across all models and
+    dataset fractions present in df, using a fixed bg_range for the
+    ForNet side. Rows ordered by parameter_count when available.
+    Diverging RdBu colormap centered at 0 makes any negative cell
+    (ForNet worse than ImageNet) immediately visible.
+    """
+    set_style()
+    if metric not in ("max_val_acc1", "min_val_loss"):
+        raise ValueError(f"Unsupported metric '{metric}'. Use 'max_val_acc1' or 'min_val_loss'.")
+
+    imagenet = df[df["train_dataset_name"] == "fornet/all/1.0"]
+    fornet = df[(df["train_dataset_name"] == "fornet/all/cos") & (df["bg_range"] == bg_range)]
+    if imagenet.empty or fornet.empty:
+        raise ValueError(f"Missing ImageNet or ForNet(bg_range={bg_range}) runs.")
+
+    merged = imagenet.merge(fornet, on=["model_name", "fg_range"], suffixes=("_in", "_fn"))
+    if merged.empty:
+        raise ValueError("No matching (model, fg_range) pairs between ImageNet and ForNet runs.")
+
+    if metric == "max_val_acc1":
+        merged["delta"] = merged["max_val_acc1_fn"] - merged["max_val_acc1_in"]
+        cbar_label = "Delta Top-1 Accuracy (ForNet - ImageNet)"
+        fmt = lambda v: f"{v*100:+.2f}"
+    else:
+        # Positive here still means "ForNet better" (i.e. lower loss).
+        merged["delta"] = merged["min_val_loss_in"] - merged["min_val_loss_fn"]
+        cbar_label = "Delta Val Loss (ImageNet - ForNet, positive = ForNet better)"
+        fmt = lambda v: f"{v:+.3f}"
+
+    merged["train_dataset_fraction"] = merged["train_dataset_fraction_in"]
+
+    if "parameter_count_in" in merged.columns:
+        order_key = merged.groupby("model_name")["parameter_count_in"].first().sort_values()
+        models = order_key.index.tolist()
+    else:
+        models = sorted(merged["model_name"].unique())
+
+    fractions = sorted(merged["train_dataset_fraction"].unique())
+
+    grid = np.full((len(models), len(fractions)), np.nan)
+    for i, m in enumerate(models):
+        for j, f in enumerate(fractions):
+            cell = merged[(merged["model_name"] == m) & (merged["train_dataset_fraction"] == f)]
+            if len(cell) == 1:
+                grid[i, j] = cell["delta"].iloc[0]
+            elif len(cell) > 1:
+                raise ValueError(f"Multiple rows for model={m}, fraction={f} - expected exactly one.")
+
+    vmax = np.nanmax(np.abs(grid))
+    fig, ax = plt.subplots(figsize=(1.8 * len(fractions) + 2, 0.9 * len(models) + 2))
+    im = ax.imshow(grid, cmap="RdBu", vmin=-vmax, vmax=vmax, aspect="auto")
+    ax.grid(False)
+
+    for i in range(len(models)):
+        for j in range(len(fractions)):
+            value = grid[i, j]
+            if not np.isnan(value):
+                text_color = "white" if abs(value) / vmax > 0.55 else "black"
+                ax.text(j, i, fmt(value), ha="center", va="center", fontsize=9,
+                        fontweight="bold", color=text_color)
+
+    ax.set_xticks(range(len(fractions)))
+    ax.set_xticklabels([f"{f:.2f}" for f in fractions])
+    ax.set_yticks(range(len(models)))
+    ax.set_yticklabels(models)
+    ax.set_xlabel("Training dataset fraction")
+    ax.set_ylabel("Model")
+    ax.set_title(f"ForNet vs ImageNet Gain (bg_range={bg_range})", fontsize=13, fontweight="bold")
+
+    cbar = fig.colorbar(im, ax=ax, shrink=0.85)
+    cbar.set_label(cbar_label)
+
+    fig.tight_layout()
+    fig.savefig(PDF_OUTPUTS_DIR / f"delta_gain_heatmap_{metric}.pdf")
+    fig.savefig(IMG_OUTPUT_DIR / f"delta_gain_heatmap_{metric}.png")
+    plt.show()
 
 
 
