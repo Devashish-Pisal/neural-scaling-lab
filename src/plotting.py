@@ -632,6 +632,115 @@ def plot_delta_gain_heatmap(df: DataFrame, metric: str = "max_val_acc1", bg_rang
 
 
 
+def plot_combined_scaling_scatter(df: DataFrame, bg_range: str = "0-100"):
+    """Overview scatter combining dataset-size, model-size, and compute
+    (FLOPs) scaling into one view. NOT a fitted scaling law - points are
+    the raw logged values, connected by a plain line in the order they
+    were trained (increasing compute), so the shape of each model's
+    trajectory is visible without implying any fitted trend.
+
+    One subplot per dataset type (ImageNet | ForNet) instead of one
+    combined axes, since 5 models x 4 dataset fractions overlaid together
+    became unreadable. Color encodes model (ordered by parameter_count,
+    sampled from viridis so the gradient itself signals "small to large"),
+    marker size encodes dataset fraction. Both panels share x/y limits -
+    total_flops is identical between ImageNet and ForNet for matched
+    (model, fg_range) pairs, so the two panels are directly comparable
+    side by side.
+
+    Scales to however many models/fractions are present in df - nothing
+    is hardcoded. Not intended as the thesis's main figure; built as a
+    fast, complete overview for status updates.
+    """
+    set_style()
+    required_cols = {"model_name", "train_dataset_name", "train_dataset_fraction",
+                      "total_flops", "min_val_loss", "bg_range", "parameter_count"}
+    missing = required_cols - set(df.columns)
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+    imagenet = df[df["train_dataset_name"] == "fornet/all/1.0"].copy()
+    fornet = df[(df["train_dataset_name"] == "fornet/all/cos") & (df["bg_range"] == bg_range)].copy()
+    if imagenet.empty or fornet.empty:
+        raise ValueError(f"Missing ImageNet or ForNet(bg_range={bg_range}) runs.")
+    models = sorted(
+        set(imagenet["model_name"]) | set(fornet["model_name"]),
+        key=lambda m: df.loc[df["model_name"] == m, "parameter_count"].iloc[0]
+    )
+    # Sample viridis away from its two ends and avoid the compressed
+    # yellow-green tail, so adjacent model sizes stay visually distinct.
+    cmap = plt.get_cmap("viridis")
+    color_map = dict(zip(models, [cmap(x) for x in np.linspace(0.05, 0.90, len(models))]))
+    fractions = sorted(df["train_dataset_fraction"].unique())
+    size_min, size_max = 70, 340
+    def frac_to_size(f):
+        lo, hi = min(fractions), max(fractions)
+        if hi == lo:
+            return (size_min + size_max) / 2
+        return size_min + (f - lo) / (hi - lo) * (size_max - size_min)
+    fig, axes = plt.subplots(1, 2, figsize=(17, 7), sharex=True, sharey=True)
+    panel_data = {"ImageNet (baseline)": (axes[0], imagenet), f"ForNet (bg = {bg_range})": (axes[1], fornet)}
+    for label, (ax, sub_df) in panel_data.items():
+        for model in models:
+            model_df = sub_df[sub_df["model_name"] == model].sort_values("total_flops")
+            if model_df.empty:
+                continue
+            sizes = model_df["train_dataset_fraction"].apply(frac_to_size)
+            # Plain connecting line through the real points - NOT a fit.
+            ax.plot(model_df["total_flops"], model_df["min_val_loss"],
+                    color=color_map[model], linewidth=1.4, alpha=0.55, zorder=2)
+            ax.scatter(model_df["total_flops"], model_df["min_val_loss"],
+                       s=sizes, color=color_map[model], edgecolor="white",
+                       linewidth=1.1, zorder=3)
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_title(label, fontsize=14, fontweight="bold")
+        ax.set_xlabel("Training compute — total FLOPs (log scale)")
+        ax.grid(True, which="major", ls="--", alpha=0.4)
+        ax.grid(True, which="minor", ls=":", alpha=0.15)
+        ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{x/1e18:.1f}e18"))
+        plt.setp(ax.get_xticklabels(), rotation=30, ha="right")
+    axes[0].set_ylabel("Validation loss $L$ (min, log scale)")
+    fig.suptitle("Scaling Overview: Compute × Dataset Size × Model Size",
+                 fontsize=16, fontweight="bold")
+    # Reserve the right ~15% of the canvas for the two legends, so they stay
+    # inside the figure (visible in plt.show(), not just in the bbox_inches
+    # ="tight" exports) instead of hanging off the axes area.
+    fig.tight_layout(rect=(0, 0, 0.845, 0.95))
+    # Legend 1: colour = model, ordered small -> large by parameter_count,
+    # with the measured parameter count spelled out so the colour gradient
+    # is readable as an actual size axis.
+    model_labels = []
+    for m in models:
+        params = df.loc[df["model_name"] == m, "parameter_count"].iloc[0]
+        model_labels.append(f"{m}  ({params / 1e6:.1f}M)")
+    model_handles = [Line2D([], [], marker="o", color=color_map[m], linestyle="",
+                            markersize=9, markeredgecolor="white") for m in models]
+    model_legend = fig.legend(model_handles, model_labels, title="Model (parameters)",
+                              loc="upper left", bbox_to_anchor=(0.855, 0.92),
+                              fontsize=10, title_fontsize=11, frameon=True,
+                              labelspacing=0.8, borderpad=0.8)
+    fig.add_artist(model_legend)
+    # Legend 2: marker size = dataset fraction. markersize is a diameter in
+    # points while scatter's s is an area in pt^2, hence the sqrt; the 0.8
+    # factor keeps the largest swatch from dominating the legend box.
+    size_labels = []
+    for f in fractions:
+        n_samples = df.loc[df["train_dataset_fraction"] == f, "train_dataset_size"].iloc[0]
+        size_labels.append(f"D = {f:.2f}  ({n_samples / 1e3:,.0f}k imgs)")
+    size_handles = [Line2D([], [], marker="o", color="none", linestyle="",
+                           markersize=(frac_to_size(f) ** 0.5) * 0.8,
+                           markerfacecolor="lightgray", markeredgecolor="black")
+                    for f in fractions]
+    fig.legend(size_handles, size_labels, title="Dataset fraction",
+               loc="upper left", bbox_to_anchor=(0.855, 0.50),
+               fontsize=10, title_fontsize=11, frameon=True,
+               labelspacing=1.4, borderpad=0.8, handletextpad=1.2)
+    fig.savefig(PDF_OUTPUTS_DIR / "combined_scaling_overview.pdf", bbox_inches="tight")
+    fig.savefig(IMG_OUTPUT_DIR / "combined_scaling_overview.png", bbox_inches="tight")
+    plt.show()
+
+
+
 def plot_crossover_epoch_vs_dataset_fraction(df: DataFrame, crossover_metric: str = "val_loss") -> None:
     """Line plot of crossover epoch vs. dataset fraction, one line per model.
 

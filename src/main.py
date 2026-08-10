@@ -4,13 +4,14 @@ from types import SimpleNamespace
 import pandas as pd
 from src.plot_pareto import plot_pareto_frontier
 from configs.config import COLUMN_NAMES
-from configs.path_config import RAW_DATA_DIR
+from configs.path_config import RAW_DATA_DIR, EXTREME_BG_RUNS_FILE_PATH
 from src.plotting import *
 from src.data_processing import get_imagenet_data, get_fornet_data, load_raw_file, filter_database
 
 
 if __name__ == '__main__':
     csv_config = SimpleNamespace(**COLUMN_NAMES)
+    extreme_bg_database = pd.read_csv(EXTREME_BG_RUNS_FILE_PATH)
 
     # imgnet_run = filter_database(train_dataset_name="fornet/all/1.0", model_name="ViT-S/16")
     # fornet_run = filter_database(train_dataset_name="fornet/all/cos", model_name="ViT-S/16", bg_range="0-100")
@@ -20,7 +21,7 @@ if __name__ == '__main__':
 
      
     # plot_dataset_size_scaling_comparison(filter_database())
-    plot_fg_bg_heatmaps(filter_database())
+    # plot_fg_bg_heatmaps(filter_database())
     # plot_fornet_vs_imagenet_delta_gain(filter_database())
 
     # plot_crossover_epoch_vs_dataset_fraction(filter_database(), "val_loss")
@@ -32,3 +33,7 @@ if __name__ == '__main__':
     # plot_model_scaling_comparison(filter_database())
     # plot_pareto_frontier(filter_database())
     # plot_crossover_flops_scaling(filter_database())
+    # plot_extreme_bg_threshold(extreme_bg_database)
+    # plot_delta_gain_heatmap(filter_database())
+    # plot_crossover_vs_model_size(filter_database())
+    plot_combined_scaling_scatter(filter_database())
