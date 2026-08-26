@@ -104,4 +104,69 @@ METRICS = {
             "value": 10049.82455120593
         }
     },
+
+    # "metric-ViT-B-32_imgnet_fg-0-100_ep-300_steps-186k"
+    "vit-b/32" : {
+        "eval/number of parameters": 88241896,
+        "eval/macs": 4364987904,
+        "eval/flops": 4478953536,
+        "eval/inference_memory_@128": 1004897792,
+        "eval/inference_memory_@64": 923764224,
+        "eval/inference_memory_@32": 883656192,
+        "eval/inference_memory_@16": 873024512,
+        "eval/inference_memory_@1": 861141504,
+        "eval/training_time": {
+            "batch_size": 512,
+            "step_time_ms": 861.1502604166667
+        },
+        "eval/peak_memory": 11897003008,
+        "eval/throughput": {
+            "batch_size": 2048,
+            "value": 11823.750345137212,
+        }
+    },
+
+    # "metric-ViT-L-16_imgnet_fg-0-100_ep-300_steps-186k_bs-256"
+    # NOTE: BATCH SIZE IS REDUCED, BECAUSE L MODEL VARIANT WAS NOT FITTING ON A100 PARTITION
+    "vit-l/16": {
+      "eval/number of parameters": 304374760,
+      "eval/macs": 59666740224,
+      "eval/flops": 63765524352,
+      "eval/inference_memory_@128": 2809778688,
+      "eval/inference_memory_@64": 2394542592,
+      "eval/inference_memory_@32": 2187547136,
+      "eval/inference_memory_@16": 2083869184,
+      "eval/inference_memory_@1": 1995612672,
+      "eval/training_time": {
+        "batch_size": 256,
+        "step_time_ms": 823.8171006944444
+      },
+      "eval/peak_memory": 55178507776,
+      "eval/throughput": {
+        "batch_size": 1024,
+        "value": 1169.7198941988966
+      }
+    },
+
+    # "metric-ViT-L-32_imgnet_fg-0-100_ep-300_steps-186k"
+    # NOTE: BATCH SIZE IS REDUCED, BECAUSE L MODEL VARIANT WAS NOT FITTING ON A100 PARTITION
+    "vit-l/32": {
+        "eval/number of parameters": 309975255, # DUMMY PARAMETERS
+        "eval/macs": 0,
+        "eval/flops": 15940000000, # DUMMY FLOPs
+        "eval/inference_memory_@128": 0,
+        "eval/inference_memory_@64": 0,
+        "eval/inference_memory_@32": 0,
+        "eval/inference_memory_@16": 0,
+        "eval/inference_memory_@1": 0,
+        "eval/training_time": {
+            "batch_size": 0,
+            "step_time_ms": 0
+        },
+        "eval/peak_memory": 0,
+        "eval/throughput": {
+            "batch_size": 0,
+            "value": 0
+        }
+    },
 }
