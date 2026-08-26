@@ -36,4 +36,4 @@ if __name__ == '__main__':
     # plot_extreme_bg_threshold(extreme_bg_database)
     # plot_delta_gain_heatmap(filter_database())
     # plot_crossover_vs_model_size(filter_database())
-    plot_combined_scaling_scatter(filter_database())
+    # plot_combined_scaling_scatter(filter_database())
