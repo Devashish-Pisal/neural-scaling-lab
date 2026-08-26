@@ -15,7 +15,8 @@ from configs.config import EXPERIMENT_CONSTANTS
 from matplotlib.lines import Line2D
 
 
-_MODEL_SIZE_ORDER = ["ViT-Ti/16", "ViT-S/16", "ViT-S/32", "ViT-B/16", "ViT-B/28"]
+_MODEL_SIZE_ORDER = ["ViT-Ti/16", "ViT-S/16", "ViT-S/32", "ViT-B/16", "ViT-B/28", "ViT-L/16", "ViT-L/32"]
+# _MODEL_SIZE_ORDER = ["ViT-Ti/16", "ViT-S/16", "ViT-B/16", "ViT-L/16"]
 _DATASET_LABELS = {
     "fornet/all/cos": ("Cosine mixing", "o", "#1f77b4"),
     "fornet/all/0.0": ("No mixing (0.0)", "s", "#d62728"),
