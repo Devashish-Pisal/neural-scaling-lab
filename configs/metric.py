@@ -151,22 +151,22 @@ METRICS = {
     # "metric-ViT-L-32_imgnet_fg-0-100_ep-300_steps-186k"
     # NOTE: BATCH SIZE IS REDUCED, BECAUSE L MODEL VARIANT WAS NOT FITTING ON A100 PARTITION
     "vit-l/32": {
-        "eval/number of parameters": 309975255, # DUMMY PARAMETERS
-        "eval/macs": 0,
-        "eval/flops": 15940000000, # DUMMY FLOPs
-        "eval/inference_memory_@128": 0,
-        "eval/inference_memory_@64": 0,
-        "eval/inference_memory_@32": 0,
-        "eval/inference_memory_@16": 0,
-        "eval/inference_memory_@1": 0,
+        "eval/number of parameters": 306583528,
+        "eval/macs": 15259625472,
+        "eval/flops": 15563278848,
+        "eval/inference_memory_@128": 2203132416,
+        "eval/inference_memory_@64": 2100109824,
+        "eval/inference_memory_@32": 2054234624,
+        "eval/inference_memory_@16": 2028022272,
+        "eval/inference_memory_@1": 2004165120,
         "eval/training_time": {
-            "batch_size": 0,
-            "step_time_ms": 0
+            "batch_size": 256,
+            "step_time_ms": 579.2594618055556
         },
-        "eval/peak_memory": 0,
+        "eval/peak_memory": 17657423360,
         "eval/throughput": {
-            "batch_size": 0,
-            "value": 0
+            "batch_size": 16384,
+            "value": 4373.902265893363
         }
-    },
+    }
 }
