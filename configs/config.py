@@ -113,8 +113,21 @@ MAIN_EXPERIMENT_ID_MAPPING = {
                 0.10: ["i8w015s3", "gsrrhci9", "nshojpql", "giqxrx3p"],
             },
         },
+        200: {
+            "imagenet_run_ids": {
+                1.00:["zz3lvgdj"],
+                0.50:["filbb6ys"],
+                0.25:["327zz6r9"],
+                0.10:["slqs1sd9"],
+            },
+            "fornet_run_ids": { # BG range is fixed to 0-100
+                1.00: ["heutcy1f"],
+                0.50: ["nuhjmrn8"],
+                0.25: ["nb5lryla"],
+                0.10: ["kfl3hd12"],
+            }
+        },
         # ---- PLANNED (Scaling Law Analysis, Table 4.4) - fill in as these complete ----
-        200: {"imagenet_run_ids": {}, "fornet_run_ids": {}},
         100: {"imagenet_run_ids": {}, "fornet_run_ids": {}},
     },
     "vit-s/32": {
@@ -363,7 +376,7 @@ EXPERIMENT_CONSTANTS = {
         "vit-b/28": 87_700_456,
         "vit-b/32": 88_241_896,
         "vit-l/16": 304_374_760,
-        "vit-l/32": 309_975_255, # DUMMY PARAMETERS
+        "vit-l/32": 306_583_528,
     }
 }
 
