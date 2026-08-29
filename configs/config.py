@@ -181,7 +181,20 @@ MAIN_EXPERIMENT_ID_MAPPING = {
                 0.10: ["dug2gz7a", "pagtn2eb", "0jxr740c", "e7kasssf"],
             },
         },
-        200: {"imagenet_run_ids": {}, "fornet_run_ids": {}},
+        200: {
+            "imagenet_run_ids": {
+                1.00:["tuypq3qp"],
+                0.50:["v2fcpxho"],
+                0.25:["h3tonrul"],
+                0.10:["kq86k0tj"],
+            },
+            "fornet_run_ids": { # BG range is fixed to 0-100
+                1.00: ["0d9hx2jy"],
+                0.50: ["hqv90fr6"],
+                0.25: ["t05n4m6r"],
+                0.10: ["ppv4p8j9"],
+            }
+        },
         100: {"imagenet_run_ids": {}, "fornet_run_ids": {}},
     },
     "vit-b/28": {
@@ -343,17 +356,17 @@ EXTREME_BG_ID_MAPPING = {
                 0.000001: "zbz6tfnx",  # 0.0001%
             }
         },
-        "vit-l/16": {
-            1.00: {
-                1.0:      "oznu5eam",  # 100%
-                0.1:      "vbpq529e",  # 10%
-                0.01:     "ehm772an",  # 1%
-                0.001:    "rgbg93ao",  # 0.1%
-                0.0001:   "ee6cmsc4",  # 0.01%
-                0.00001:  "313lwfuo",  # 0.001%
-                0.000001: "8gosxiqz",  # 0.0001%
-            }
-        },
+#        "vit-l/16": {
+#            1.00: {
+#                1.0:      "oznu5eam",  # 100%
+#                0.1:      "vbpq529e",  # 10%
+#                0.01:     "ehm772an",  # 1%
+#                0.001:    "rgbg93ao",  # 0.1%
+#                0.0001:   "ee6cmsc4",  # 0.01%
+#                0.00001:  "313lwfuo",  # 0.001%
+#                0.000001: "8gosxiqz",  # 0.0001%
+#            }
+#        },
     }
 }
 
