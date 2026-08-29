@@ -216,8 +216,9 @@ for ax, (dataset_name, beta) in zip(axes, plot_configs):
 
 
 fig.suptitle(
-    "", # Scaling of Validation Loss with Dataset Size
-    fontsize=15,
+    r"Validation Loss Scaling across Training Step Exponents ($\beta \in \{0.6, 0.8, 1.0\}$)",
+    fontsize=14,
+    fontweight="bold",
     y=0.995
 )
 

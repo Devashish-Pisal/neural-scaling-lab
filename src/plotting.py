@@ -15,8 +15,9 @@ from configs.config import EXPERIMENT_CONSTANTS
 from matplotlib.lines import Line2D
 
 
-_MODEL_SIZE_ORDER = ["ViT-Ti/16", "ViT-S/16", "ViT-S/32", "ViT-B/16", "ViT-B/28", "ViT-L/16", "ViT-L/32"]
-# _MODEL_SIZE_ORDER = ["ViT-Ti/16", "ViT-S/16", "ViT-B/16", "ViT-L/16"]
+_MODEL_SIZE_ORDER = ["ViT-Ti/16", "ViT-S/16", "ViT-S/32", "ViT-B/16", "ViT-B/28", "ViT-B/32", "ViT-L/16", "ViT-L/32"]
+_PATCH_16_MODEL_ORDER = ["ViT-Ti/16", "ViT-S/16", "ViT-B/16", "ViT-L/16"]
+_ARCH_ORDER = ["ViT-Ti", "ViT-S", "ViT-B", "ViT-L"]
 _DATASET_LABELS = {
     "fornet/all/cos": ("Cosine mixing", "o", "#1f77b4"),
     "fornet/all/0.0": ("No mixing (0.0)", "s", "#d62728"),
@@ -24,14 +25,16 @@ _DATASET_LABELS = {
 
 
 
-def plot_dataset_size_scaling_comparison(df: DataFrame):
+def plot_dataset_size_scaling_comparison(df: DataFrame, baseline_epochs: int = 300):
     set_style()
 
-    df = df[df["bg_range"].isin(["0-100", None])].copy()
+    df = df[(df["baseline_epochs"] == baseline_epochs) & (df["bg_range"].isin(["0-100", None]))].copy()
     df["architecture"] = df["model_name"].str.split("/").str[0]
     df["patch_size"] = df["model_name"].str.split("/").str[1]
 
-    architectures = sorted(df["architecture"].unique())
+    architectures = [a for a in _ARCH_ORDER if a in df["architecture"].unique()]
+    if not architectures:
+        architectures = sorted(df["architecture"].unique())
 
     patch_colors = {"16": "#1f77b4", "28": "#2ca02c", "32": "#d62728"}
     datasets = {
@@ -39,12 +42,12 @@ def plot_dataset_size_scaling_comparison(df: DataFrame):
         "fornet/all/cos": ("ForNet", "s"),
     }
 
-    ncols = 3
+    ncols = 2 if len(architectures) <= 4 else 3
     nrows = math.ceil(len(architectures) / ncols)
     fig, axes = plt.subplots(
         nrows,
         ncols,
-        figsize=(8 * ncols, 6 * nrows),
+        figsize=(7.5 * ncols, 5.5 * nrows),
         sharey=True,
     )
     axes = np.atleast_1d(axes).ravel()
@@ -70,7 +73,7 @@ def plot_dataset_size_scaling_comparison(df: DataFrame):
                 )
                 ax.loglog(
                     D, fit, "--", color=color, lw=1.5,
-                    label=rf"P{patch} {dataset_label}: $L={a:.2e}D^{{{alpha:.2f}}}$ ($R^2={r2:.3f}$)"
+                    label=rf"P{patch} {dataset_label}: $L={a:.2f}D^{{{alpha:.2f}}}$ ($R^2={r2:.3f}$)"
                 )
         ax.set_title(arch, fontsize=13, fontweight="bold")
         ax.set_xlabel("Dataset fraction $D$")
@@ -83,13 +86,13 @@ def plot_dataset_size_scaling_comparison(df: DataFrame):
             Line2D([], [], marker="s", color="black", ls="", markersize=7),
         ]
         labels += ["ImageNet", "ForNet"]
-        ax.legend(handles, labels, fontsize=8, loc="best", framealpha=0.95)
+        ax.legend(handles, labels, fontsize=8.5, loc="best", framealpha=0.95)
     for ax in axes[len(architectures):]:
         fig.delaxes(ax)
     for ax in axes[::ncols]:
         if ax in fig.axes:
             ax.set_ylabel("Validation loss $L$")
-    fig.suptitle("Dataset Scaling Laws", fontsize=16, fontweight="bold")
+    fig.suptitle(f"Dataset Scaling Laws ({baseline_epochs}-Epoch Baseline)", fontsize=16, fontweight="bold")
     fig.tight_layout()
     fig.savefig(PDF_OUTPUTS_DIR / "dataset_scaling_comparison.pdf")
     fig.savefig(IMG_OUTPUT_DIR / "dataset_scaling_comparison.png")
@@ -97,22 +100,28 @@ def plot_dataset_size_scaling_comparison(df: DataFrame):
 
 
 
-def plot_fg_bg_heatmaps(df:DataFrame):
-    df = df[(df["train_dataset_name"] == "fornet/all/cos")].copy()
-    models = sorted(df["model_name"].unique())
+def plot_fg_bg_heatmaps(df: DataFrame, baseline_epochs: int = 300):
+    set_style()
+    df = df[(df["baseline_epochs"] == baseline_epochs) & (df["train_dataset_name"] == "fornet/all/cos")].copy()
+    
+    tier1_models = ["ViT-Ti/16", "ViT-S/16", "ViT-S/32", "ViT-B/16", "ViT-B/28"]
+    models = [m for m in tier1_models if m in df["model_name"].unique()]
+    if not models:
+        models = [m for m in _MODEL_SIZE_ORDER if m in df["model_name"].unique()]
+
     fg_order = [1.00, 0.50, 0.25, 0.10]
     bg_order = [0.10, 0.25, 0.50, 1.00]
     n_models = len(models)
     ncols = min(3, n_models)
     nrows = math.ceil(n_models / ncols)
-    fig, axes = plt.subplots(nrows, ncols, figsize=(8*ncols, 7*nrows))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(7.5 * ncols, 6.5 * nrows))
     axes = np.array(axes).reshape(-1)
     vmin = df["max_val_acc1"].min() * 100
     vmax = df["max_val_acc1"].max() * 100
     for ax, model in zip(axes, models):
-        model_df = df[df["model_name"] == model]
-        model_df["fg_fraction"] = [float((int(item.split("-")[1])-int(item.split("-")[0]))/100) for item in model_df["fg_range"]]
-        model_df["bg_fraction"] = [float((int(item.split("-")[1])-int(item.split("-")[0]))/100) for item in model_df["bg_range"]]
+        model_df = df[df["model_name"] == model].copy()
+        model_df["fg_fraction"] = [float(item.split("-")[1]) / 100 for item in model_df["fg_range"]]
+        model_df["bg_fraction"] = [float(item.split("-")[1]) / 100 for item in model_df["bg_range"]]
         heatmap = np.zeros((4, 4))
         for i, fg in enumerate(fg_order):
             for j, bg in enumerate(bg_order):
@@ -120,7 +129,7 @@ def plot_fg_bg_heatmaps(df:DataFrame):
                     (model_df["fg_fraction"] == fg) &
                     (model_df["bg_fraction"] == bg)
                 ]
-                if len(row) == 1:
+                if len(row) >= 1:
                     heatmap[i, j] = row["max_val_acc1"].iloc[0] * 100
                 else:
                     heatmap[i, j] = np.nan
@@ -138,28 +147,29 @@ def plot_fg_bg_heatmaps(df:DataFrame):
             for j in range(4):
                 value = heatmap[i, j]
                 if not np.isnan(value):
-                    ax.text(j,i,f"{value:.2f}",ha="center",va="center",color="white",fontsize=9,fontweight="bold")
+                    ax.text(j, i, f"{value:.2f}", ha="center", va="center", color="white", fontsize=9.5, fontweight="bold")
         ax.set_xticks(range(4))
         ax.set_yticks(range(4))
         ax.set_xticklabels(["0.10", "0.25", "0.50", "1.00"])
         ax.set_yticklabels(["1.00", "0.50", "0.25", "0.10"])
         ax.set_xlabel("Background Fraction")
         ax.set_ylabel("Foreground Fraction")
-        ax.set_title(model)
+        ax.set_title(model, fontsize=12, fontweight="bold")
     for ax in axes[n_models:]:
-        ax.remove()
-    cbar = fig.colorbar(im,ax=fig.axes,shrink=0.85)
+        fig.delaxes(ax)
+    cbar = fig.colorbar(im, ax=fig.axes, shrink=0.85)
     cbar.set_label("Top-1 Accuracy (%)")
     fig.subplots_adjust(right=0.75, wspace=0.3, hspace=0.3)
-    fig.suptitle("Foreground vs Background Heatmap",fontsize=14)
-    fig.savefig(PDF_OUTPUTS_DIR /"fg_bg_heatmaps.pdf")
-    fig.savefig(IMG_OUTPUT_DIR /"fg_bg_heatmaps.png")
+    fig.suptitle(f"Foreground vs Background Top-1 Accuracy ({baseline_epochs}-Epoch Baseline)", fontsize=14, fontweight="bold")
+    fig.savefig(PDF_OUTPUTS_DIR / "fg_bg_heatmaps.pdf")
+    fig.savefig(IMG_OUTPUT_DIR / "fg_bg_heatmaps.png")
     plt.show()
 
 
 
-def plot_fornet_vs_imagenet_delta_gain(df: DataFrame) -> None:
-    data = df.copy()
+def plot_fornet_vs_imagenet_delta_gain(df: DataFrame, baseline_epochs: int = 300) -> None:
+    set_style()
+    data = df[df["baseline_epochs"] == baseline_epochs].copy()
     data["bg_range"] = data["bg_range"].fillna("null").astype(str).str.lower()
     imagenet = data[
         (data["train_dataset_name"] == "fornet/all/1.0") &
@@ -170,15 +180,16 @@ def plot_fornet_vs_imagenet_delta_gain(df: DataFrame) -> None:
     ]
     if imagenet.empty or fornet.empty:
         raise ValueError("Missing ImageNet or ForNet runs.")
-    models = sorted(set(imagenet["model_name"]).intersection(fornet["model_name"]))
+    all_models = set(imagenet["model_name"]).intersection(fornet["model_name"])
+    models = [m for m in _MODEL_SIZE_ORDER if m in all_models]
     if not models:
-        raise ValueError("No matching models found.")
+        models = sorted(all_models)
     # Natural ordering: 0-10, 0-25, 0-50, 0-100
     bg_ranges = sorted(
         [bg for bg in fornet["bg_range"].unique() if bg != "null"],
-        key=lambda x: int(x.split("-")[1])
+        key=lambda x: float(x.split("-")[1])
     )
-    fractions = [0.1, 0.25, 0.5, 1.0]
+    fractions = [0.10, 0.25, 0.50, 1.00]
     # Global y-limits
     all_deltas = []
     for model in models:
@@ -210,7 +221,6 @@ def plot_fornet_vs_imagenet_delta_gain(df: DataFrame) -> None:
     )
     axes = np.atleast_1d(axes).ravel()
     num_bgs = len(bg_ranges)
-    # Publication-friendly colors
     colors = sns.color_palette("colorblind", n_colors=num_bgs)
     group_width = 0.8
     bar_width = group_width / num_bgs
@@ -258,13 +268,13 @@ def plot_fornet_vs_imagenet_delta_gain(df: DataFrame) -> None:
                         fontsize=7,
                         rotation=90 if num_bgs > 3 else 0
                     )
-        ax.axhline(0,color="black",ls="--",lw=1.2)
-        ax.set_title(model)
+        ax.axhline(0, color="black", ls="--", lw=1.2)
+        ax.set_title(model, fontsize=12, fontweight="bold")
         ax.set_xlabel("Training dataset fraction")
         ax.set_xticks(x)
-        ax.set_xticklabels(valid)
+        ax.set_xticklabels([f"{v:.2f}" for v in valid])
         ax.set_ylim(ymin, ymax)
-        ax.grid(axis="y",ls=":",alpha=0.6)
+        ax.grid(axis="y", ls=":", alpha=0.6)
         ax.yaxis.set_major_formatter(FuncFormatter(lambda y, _: f"{100 * y:.0f}%"))
         if len(valid) > 0:
             ax.legend(
@@ -277,6 +287,7 @@ def plot_fornet_vs_imagenet_delta_gain(df: DataFrame) -> None:
     for ax in axes[::ncols]:
         if ax in fig.axes:
             ax.set_ylabel("Δacc1 [ForNet − ImageNet]")
+    fig.suptitle(f"ForNet vs. ImageNet Top-1 Accuracy Delta ({baseline_epochs}-Epoch Baseline)", fontsize=15, fontweight="bold")
     fig.tight_layout()
     fig.savefig(
         PDF_OUTPUTS_DIR / "fornet_vs_imagenet_delta_gain.pdf",
@@ -290,34 +301,16 @@ def plot_fornet_vs_imagenet_delta_gain(df: DataFrame) -> None:
 
 
 
-def plot_model_scaling_comparison(df: DataFrame):
+def plot_model_scaling_comparison(df: DataFrame, baseline_epochs: int = 300):
     set_style()
-    # x-axis is parameter count N (S/16 and S/32 share N=22M, B/16 and B/28
-    # share N=86M) so a proper L ~ a*N^b law can be fit; fits use the true N,
-    # but points sharing an N are nudged apart (N_plot) purely for display so
-    # markers/labels don't stack, and x-ticks list every model at that N.
+    df = df[(df["baseline_epochs"] == baseline_epochs) & (df["bg_range"].isin(["0-100", None]))].copy()
 
-    model_params = EXPERIMENT_CONSTANTS["model_parameters"]  # "vit-ti/16" -> N, lowercase keys
+    model_params = EXPERIMENT_CONSTANTS["model_parameters"]
     fractions = [0.10, 0.25, 0.50, 1.00]
-    models = [m for m in _MODEL_SIZE_ORDER if m in df["model_name"].unique()]
+    models = [m for m in _PATCH_16_MODEL_ORDER if m in df["model_name"].unique()]
     if not models:
-        raise ValueError("No known models (from _MODEL_SIZE_ORDER) found in database.")
+        raise ValueError("No patch-16 models found in database for baseline_epochs.")
     param_count = {m: model_params[m.lower()] for m in models}
-
-    # Group models sharing a parameter count for tick labels, e.g. 22M -> "S/16, S/32"
-    models_at_n = {}
-    for m, n in param_count.items():
-        models_at_n.setdefault(n, []).append(m.split("ViT-")[-1])
-
-    # Nudge models sharing an N apart horizontally (display only) so their
-    # markers/labels don't overlap.
-    dodge = {}
-    for n, group_shorts in models_at_n.items():
-        span = 0.16
-        offsets = [0.0] if len(group_shorts) == 1 else np.linspace(-span / 2, span / 2, len(group_shorts))
-        for short, off in zip(group_shorts, offsets):
-            dodge[f"ViT-{short}"] = off
-    n_plot = {m: param_count[m] * (1 + dodge[m]) for m in models}
 
     datasets = {
         "fornet/all/1.0": ("ImageNet", "#1f77b4", "o"),
@@ -329,83 +322,79 @@ def plot_model_scaling_comparison(df: DataFrame):
     y_bounds = []
 
     for ax, frac in zip(axes, fractions):
-        rows = []
+        frac_rows = []
         for model in models:
-            img_row = df[
-                (df["model_name"] == model) &
-                (df["train_dataset_name"] == "fornet/all/1.0") &
-                (df["train_dataset_fraction"] == frac)
-            ]
-            if len(img_row):
-                loss = img_row["min_val_loss"].iloc[0]
-                rows.append({"model": model, "N": param_count[model], "N_plot": n_plot[model],
-                             "dataset_name": "fornet/all/1.0", "loss": loss, "lo": 0.0, "hi": 0.0})
-
-            fn_rows = df[
-                (df["model_name"] == model) &
-                (df["train_dataset_name"] == "fornet/all/cos") &
-                (df["train_dataset_fraction"] == frac)
-            ]
-            if len(fn_rows):
-                vals = fn_rows["min_val_loss"].to_numpy(float)
-                mean = vals.mean()
-                rows.append({"model": model, "N": param_count[model], "N_plot": n_plot[model],
-                             "dataset_name": "fornet/all/cos", "loss": mean,
-                             "lo": mean - vals.min(), "hi": vals.max() - mean})
-        frac_df = pd.DataFrame(rows)
-        y_bounds += (frac_df["loss"] - frac_df["lo"]).tolist()
-        y_bounds += (frac_df["loss"] + frac_df["hi"]).tolist()
+            for ds_name in datasets:
+                row = df[
+                    (df["model_name"] == model) &
+                    (df["train_dataset_name"] == ds_name) &
+                    (df["train_dataset_fraction"] == frac)
+                ]
+                if len(row) >= 1:
+                    loss = row["min_val_loss"].iloc[0]
+                    frac_rows.append({
+                        "model": model,
+                        "N": param_count[model],
+                        "dataset_name": ds_name,
+                        "loss": loss,
+                    })
+        frac_df = pd.DataFrame(frac_rows)
+        if frac_df.empty:
+            continue
+        y_bounds += frac_df["loss"].tolist()
 
         for dataset_name, (label, color, marker) in datasets.items():
-            sub = frac_df[frac_df["dataset_name"] == dataset_name]
+            sub = frac_df[frac_df["dataset_name"] == dataset_name].sort_values("N")
             if sub.empty:
                 continue
             N = sub["N"].to_numpy(float)
-            N_plot = sub["N_plot"].to_numpy(float)
             L = sub["loss"].to_numpy(float)
-            ax.errorbar(
-                N_plot, L, yerr=[sub["lo"].to_numpy(float), sub["hi"].to_numpy(float)],
-                fmt=marker, color=color, markersize=8, markeredgecolor="white",
-                markeredgewidth=0.8, capsize=4, zorder=3, ls="", label=label,
+            ax.scatter(
+                N, L, s=80, marker=marker, color=color,
+                edgecolor="white", linewidth=0.8, zorder=3, label=label,
             )
             if len(N) >= 2:
                 coeffs, _ = calculate_fit(L, N)
                 alpha, a = coeffs[0], np.exp(coeffs[1])
                 pred = coeffs[0] * np.log(N) + coeffs[1]
                 r2 = 1 - np.sum((np.log(L) - pred) ** 2) / np.sum((np.log(L) - np.mean(np.log(L))) ** 2)
-                n_smooth = np.linspace(N.min(), N.max(), 100)
+                n_smooth = np.geomspace(N.min(), N.max(), 100)
                 ax.plot(
                     n_smooth, a * n_smooth ** alpha, "--", color=color, lw=1.5,
                     label=rf"{label} Fit: $L={a:.2f}N^{{{alpha:.2f}}}$ ($R^2={r2:.3f}$)"
                 )
 
-        # One label per model (above its highest point) since N_plot already
-        # separates models that share a true parameter count.
-        for model, g in frac_df.groupby("model"):
-            ax.annotate(
-                model.split("ViT-")[-1], xy=(g["N_plot"].iloc[0], (g["loss"] + g["hi"]).max()),
-                xytext=(0, 7), textcoords="offset points", ha="center",
-                fontsize=8, color="black", fontweight="bold", clip_on=False,
-            )
+        # Annotate model names cleanly above points
+        for model in models:
+            m_sub = frac_df[frac_df["model"] == model]
+            if not m_sub.empty:
+                max_loss = m_sub["loss"].max()
+                short_name = model.split("ViT-")[-1]
+                ax.annotate(
+                    short_name, xy=(param_count[model], max_loss),
+                    xytext=(0, 8), textcoords="offset points", ha="center",
+                    fontsize=9, color="black", fontweight="bold", clip_on=False,
+                )
 
         ax.set_xscale("log")
         ax.set_yscale("log")
-        n_ticks = sorted(models_at_n)
+        n_ticks = [param_count[m] for m in models]
+        tick_labels = [f"{param_count[m]/1e6:.1f}M\n({m.split('ViT-')[-1]})" for m in models]
         ax.xaxis.set_major_locator(ticker.FixedLocator(n_ticks))
-        ax.xaxis.set_major_formatter(ticker.FuncFormatter(
-            lambda x, _: f"{x / 1e6:.1f}M\n({', '.join(models_at_n.get(x, []))})"
-        ))
+        ax.xaxis.set_major_formatter(ticker.FixedFormatter(tick_labels))
         ax.xaxis.set_minor_locator(ticker.NullLocator())
-        ax.tick_params(axis="x", labelsize=8)
-        ax.set_title(f"Dataset fraction = {frac:.2f}", fontsize=12, fontweight="bold")
+        ax.tick_params(axis="x", labelsize=8.5)
+        ax.set_title(f"Dataset fraction $D = {frac:.2f}$", fontsize=12, fontweight="bold")
         ax.set_xlabel("Parameter count $N$")
         ax.grid(True, which="major", ls="--", alpha=0.4)
-        ax.legend(fontsize=8, loc="best", framealpha=0.95)
+        ax.grid(True, which="minor", ls=":", alpha=0.15)
+        ax.legend(fontsize=8.5, loc="best", framealpha=0.95)
 
-    axes[0].set_ylim(min(y_bounds) * 0.85, max(y_bounds) * 1.35)
+    if y_bounds:
+        axes[0].set_ylim(min(y_bounds) * 0.88, max(y_bounds) * 1.25)
     for ax in axes[::2]:
         ax.set_ylabel("Validation loss $L$ (min)")
-    fig.suptitle("Model Scaling: Validation Loss vs. Parameter Count", fontsize=16, fontweight="bold")
+    fig.suptitle(f"Model Scaling: Validation Loss vs. Parameter Count (Patch 16, {baseline_epochs}-Epoch Baseline)", fontsize=16, fontweight="bold")
     fig.tight_layout()
     fig.savefig(PDF_OUTPUTS_DIR / "model_scaling_comparison.pdf")
     fig.savefig(IMG_OUTPUT_DIR / "model_scaling_comparison.png")
@@ -413,14 +402,16 @@ def plot_model_scaling_comparison(df: DataFrame):
 
 
 
-def plot_flops_scaling_comparison(df: DataFrame):
+def plot_flops_scaling_comparison(df: DataFrame, baseline_epochs: int = 300):
     set_style()
 
-    df = df[df["bg_range"].isin(["0-100", None])].copy()
+    df = df[(df["baseline_epochs"] == baseline_epochs) & (df["bg_range"].isin(["0-100", None]))].copy()
     df["architecture"] = df["model_name"].str.split("/").str[0]
     df["patch_size"] = df["model_name"].str.split("/").str[1]
 
-    architectures = sorted(df["architecture"].unique())
+    architectures = [a for a in _ARCH_ORDER if a in df["architecture"].unique()]
+    if not architectures:
+        architectures = sorted(df["architecture"].unique())
 
     patch_colors = {"16": "#1f77b4", "28": "#2ca02c", "32": "#d62728"}
     datasets = {
@@ -428,12 +419,12 @@ def plot_flops_scaling_comparison(df: DataFrame):
         "fornet/all/cos": ("ForNet", "s"),
     }
 
-    ncols = 3
+    ncols = 2 if len(architectures) <= 4 else 3
     nrows = math.ceil(len(architectures) / ncols)
     fig, axes = plt.subplots(
         nrows,
         ncols,
-        figsize=(8 * ncols, 6 * nrows),
+        figsize=(7.5 * ncols, 5.5 * nrows),
         sharey=True,
     )
     axes = np.atleast_1d(axes).ravel()
@@ -465,9 +456,6 @@ def plot_flops_scaling_comparison(df: DataFrame):
         ax.set_xlabel("Training compute (FLOPs) $C$")
         ax.grid(True, which="major", ls="--", alpha=0.35)
         ax.grid(True, which="minor", ls=":", alpha=0.15)
-        # Auto log ticks can collapse to <4 labels when a single patch size's
-        # FLOPs span less than a decade, so pin ticks to the actual FLOPs
-        # values present (>=4, since every model has 4 dataset fractions).
         flop_ticks = sorted(float(v) for v in arch_df["total_flops"].unique())
         ax.xaxis.set_major_locator(ticker.FixedLocator(flop_ticks))
         ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f'{x / 1e18:.2f}e18'))
@@ -479,13 +467,13 @@ def plot_flops_scaling_comparison(df: DataFrame):
             Line2D([], [], marker="s", color="black", ls="", markersize=7),
         ]
         labels += ["ImageNet", "ForNet"]
-        ax.legend(handles, labels, fontsize=8, loc="best", framealpha=0.95)
+        ax.legend(handles, labels, fontsize=8.5, loc="best", framealpha=0.95)
     for ax in axes[len(architectures):]:
         fig.delaxes(ax)
     for ax in axes[::ncols]:
         if ax in fig.axes:
             ax.set_ylabel("Validation loss $L$")
-    fig.suptitle("Compute (FLOPs) Scaling Laws", fontsize=16, fontweight="bold")
+    fig.suptitle(f"Compute (FLOPs) Scaling Laws ({baseline_epochs}-Epoch Baseline)", fontsize=16, fontweight="bold")
     fig.tight_layout()
     fig.savefig(PDF_OUTPUTS_DIR / "flops_scaling_comparison.pdf")
     fig.savefig(IMG_OUTPUT_DIR / "flops_scaling_comparison.png")
@@ -509,8 +497,10 @@ def plot_extreme_bg_threshold(df: DataFrame, metric: str = "max_val_acc1"):
     if "bg_fraction" not in df.columns:
         raise ValueError("'bg_fraction' column not found in dataframe.")
 
+    raw_groups = df[["model_name", "fg_range"]].drop_duplicates().itertuples(index=False, name=None)
     groups = sorted(
-        df[["model_name", "fg_range"]].drop_duplicates().itertuples(index=False, name=None)
+        raw_groups,
+        key=lambda g: (_MODEL_SIZE_ORDER.index(g[0]) if g[0] in _MODEL_SIZE_ORDER else len(_MODEL_SIZE_ORDER), g[1])
     )
     n = len(groups)
     if n == 0:
@@ -537,7 +527,7 @@ def plot_extreme_bg_threshold(df: DataFrame, metric: str = "max_val_acc1"):
         ax.set_xscale("log")
         ax.set_xlabel("Background fraction (log scale)")
         ax.set_ylabel(y_label)
-        ax.set_title(f"{model} | fg_range={fg_range}", fontsize=12, fontweight="bold")
+        ax.set_title(f"{model} (fg_range={fg_range})", fontsize=12, fontweight="bold")
         ax.grid(True, which="major", ls="--", alpha=0.4)
         ax.grid(True, which="minor", ls=":", alpha=0.15)
         ax.legend(fontsize=9, loc="best", framealpha=0.95)
@@ -553,7 +543,7 @@ def plot_extreme_bg_threshold(df: DataFrame, metric: str = "max_val_acc1"):
 
 
 
-def plot_delta_gain_heatmap(df: DataFrame, metric: str = "max_val_acc1", bg_range: str = "0-100"):
+def plot_delta_gain_heatmap(df: DataFrame, metric: str = "max_val_acc1", bg_range: str = "0-100", baseline_epochs: int = 300):
     """Single heatmap of (ForNet - ImageNet) delta across all models and
     dataset fractions present in df, using a fixed bg_range for the
     ForNet side. Rows ordered by parameter_count when available.
@@ -564,10 +554,11 @@ def plot_delta_gain_heatmap(df: DataFrame, metric: str = "max_val_acc1", bg_rang
     if metric not in ("max_val_acc1", "min_val_loss"):
         raise ValueError(f"Unsupported metric '{metric}'. Use 'max_val_acc1' or 'min_val_loss'.")
 
-    imagenet = df[df["train_dataset_name"] == "fornet/all/1.0"]
-    fornet = df[(df["train_dataset_name"] == "fornet/all/cos") & (df["bg_range"] == bg_range)]
+    df_base = df[df["baseline_epochs"] == baseline_epochs].copy()
+    imagenet = df_base[df_base["train_dataset_name"] == "fornet/all/1.0"]
+    fornet = df_base[(df_base["train_dataset_name"] == "fornet/all/cos") & (df_base["bg_range"] == bg_range)]
     if imagenet.empty or fornet.empty:
-        raise ValueError(f"Missing ImageNet or ForNet(bg_range={bg_range}) runs.")
+        raise ValueError(f"Missing ImageNet or ForNet(bg_range={bg_range}) runs for baseline_epochs={baseline_epochs}.")
 
     merged = imagenet.merge(fornet, on=["model_name", "fg_range"], suffixes=("_in", "_fn"))
     if merged.empty:
@@ -576,7 +567,7 @@ def plot_delta_gain_heatmap(df: DataFrame, metric: str = "max_val_acc1", bg_rang
     if metric == "max_val_acc1":
         merged["delta"] = merged["max_val_acc1_fn"] - merged["max_val_acc1_in"]
         cbar_label = "Delta Top-1 Accuracy (ForNet - ImageNet)"
-        fmt = lambda v: f"{v*100:+.2f}"
+        fmt = lambda v: f"{v*100:+.2f}%"
     else:
         # Positive here still means "ForNet better" (i.e. lower loss).
         merged["delta"] = merged["min_val_loss_in"] - merged["min_val_loss_fn"]
@@ -585,11 +576,10 @@ def plot_delta_gain_heatmap(df: DataFrame, metric: str = "max_val_acc1", bg_rang
 
     merged["train_dataset_fraction"] = merged["train_dataset_fraction_in"]
 
-    if "parameter_count_in" in merged.columns:
-        order_key = merged.groupby("model_name")["parameter_count_in"].first().sort_values()
-        models = order_key.index.tolist()
-    else:
-        models = sorted(merged["model_name"].unique())
+    all_models = merged["model_name"].unique()
+    models = [m for m in _MODEL_SIZE_ORDER if m in all_models]
+    if not models:
+        models = sorted(all_models)
 
     fractions = sorted(merged["train_dataset_fraction"].unique())
 
@@ -597,10 +587,8 @@ def plot_delta_gain_heatmap(df: DataFrame, metric: str = "max_val_acc1", bg_rang
     for i, m in enumerate(models):
         for j, f in enumerate(fractions):
             cell = merged[(merged["model_name"] == m) & (merged["train_dataset_fraction"] == f)]
-            if len(cell) == 1:
+            if len(cell) >= 1:
                 grid[i, j] = cell["delta"].iloc[0]
-            elif len(cell) > 1:
-                raise ValueError(f"Multiple rows for model={m}, fraction={f} - expected exactly one.")
 
     vmax = np.nanmax(np.abs(grid))
     fig, ax = plt.subplots(figsize=(1.8 * len(fractions) + 2, 0.9 * len(models) + 2))
@@ -621,7 +609,7 @@ def plot_delta_gain_heatmap(df: DataFrame, metric: str = "max_val_acc1", bg_rang
     ax.set_yticklabels(models)
     ax.set_xlabel("Training dataset fraction")
     ax.set_ylabel("Model")
-    ax.set_title(f"ForNet vs ImageNet Gain (bg_range={bg_range})", fontsize=13, fontweight="bold")
+    ax.set_title(f"ForNet vs ImageNet Gain (bg_range={bg_range}, {baseline_epochs}-Epoch Baseline)", fontsize=13, fontweight="bold")
 
     cbar = fig.colorbar(im, ax=ax, shrink=0.85)
     cbar.set_label(cbar_label)
@@ -633,7 +621,7 @@ def plot_delta_gain_heatmap(df: DataFrame, metric: str = "max_val_acc1", bg_rang
 
 
 
-def plot_combined_scaling_scatter(df: DataFrame, bg_range: str = "0-100"):
+def plot_combined_scaling_scatter(df: DataFrame, bg_range: str = "0-100", baseline_epochs: int = 300):
     """Overview scatter combining dataset-size, model-size, and compute
     (FLOPs) scaling into one view. NOT a fitted scaling law - points are
     the raw logged values, connected by a plain line in the order they
@@ -654,24 +642,24 @@ def plot_combined_scaling_scatter(df: DataFrame, bg_range: str = "0-100"):
     fast, complete overview for status updates.
     """
     set_style()
+    df_base = df[df["baseline_epochs"] == baseline_epochs].copy()
     required_cols = {"model_name", "train_dataset_name", "train_dataset_fraction",
                       "total_flops", "min_val_loss", "bg_range", "parameter_count"}
-    missing = required_cols - set(df.columns)
+    missing = required_cols - set(df_base.columns)
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
-    imagenet = df[df["train_dataset_name"] == "fornet/all/1.0"].copy()
-    fornet = df[(df["train_dataset_name"] == "fornet/all/cos") & (df["bg_range"] == bg_range)].copy()
+    imagenet = df_base[df_base["train_dataset_name"] == "fornet/all/1.0"].copy()
+    fornet = df_base[(df_base["train_dataset_name"] == "fornet/all/cos") & (df_base["bg_range"] == bg_range)].copy()
     if imagenet.empty or fornet.empty:
-        raise ValueError(f"Missing ImageNet or ForNet(bg_range={bg_range}) runs.")
-    models = sorted(
-        set(imagenet["model_name"]) | set(fornet["model_name"]),
-        key=lambda m: df.loc[df["model_name"] == m, "parameter_count"].iloc[0]
-    )
-    # Sample viridis away from its two ends and avoid the compressed
-    # yellow-green tail, so adjacent model sizes stay visually distinct.
+        raise ValueError(f"Missing ImageNet or ForNet(bg_range={bg_range}) runs for baseline_epochs={baseline_epochs}.")
+    all_models = set(imagenet["model_name"]) | set(fornet["model_name"])
+    models = [m for m in _MODEL_SIZE_ORDER if m in all_models]
+    if not models:
+        models = sorted(all_models, key=lambda m: df_base.loc[df_base["model_name"] == m, "parameter_count"].iloc[0])
+
     cmap = plt.get_cmap("viridis")
     color_map = dict(zip(models, [cmap(x) for x in np.linspace(0.05, 0.90, len(models))]))
-    fractions = sorted(df["train_dataset_fraction"].unique())
+    fractions = sorted(df_base["train_dataset_fraction"].unique())
     size_min, size_max = 70, 340
     def frac_to_size(f):
         lo, hi = min(fractions), max(fractions)
@@ -686,7 +674,6 @@ def plot_combined_scaling_scatter(df: DataFrame, bg_range: str = "0-100"):
             if model_df.empty:
                 continue
             sizes = model_df["train_dataset_fraction"].apply(frac_to_size)
-            # Plain connecting line through the real points - NOT a fit.
             ax.plot(model_df["total_flops"], model_df["min_val_loss"],
                     color=color_map[model], linewidth=1.4, alpha=0.55, zorder=2)
             ax.scatter(model_df["total_flops"], model_df["min_val_loss"],
@@ -701,18 +688,12 @@ def plot_combined_scaling_scatter(df: DataFrame, bg_range: str = "0-100"):
         ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{x/1e18:.1f}e18"))
         plt.setp(ax.get_xticklabels(), rotation=30, ha="right")
     axes[0].set_ylabel("Validation loss $L$ (min, log scale)")
-    fig.suptitle("Scaling Overview: Compute × Dataset Size × Model Size",
+    fig.suptitle(f"Scaling Overview: Compute × Dataset Size × Model Size ({baseline_epochs}-Epoch Baseline)",
                  fontsize=16, fontweight="bold")
-    # Reserve the right ~15% of the canvas for the two legends, so they stay
-    # inside the figure (visible in plt.show(), not just in the bbox_inches
-    # ="tight" exports) instead of hanging off the axes area.
     fig.tight_layout(rect=(0, 0, 0.845, 0.95))
-    # Legend 1: colour = model, ordered small -> large by parameter_count,
-    # with the measured parameter count spelled out so the colour gradient
-    # is readable as an actual size axis.
     model_labels = []
     for m in models:
-        params = df.loc[df["model_name"] == m, "parameter_count"].iloc[0]
+        params = df_base.loc[df_base["model_name"] == m, "parameter_count"].iloc[0]
         model_labels.append(f"{m}  ({params / 1e6:.1f}M)")
     model_handles = [Line2D([], [], marker="o", color=color_map[m], linestyle="",
                             markersize=9, markeredgecolor="white") for m in models]
@@ -721,12 +702,9 @@ def plot_combined_scaling_scatter(df: DataFrame, bg_range: str = "0-100"):
                               fontsize=10, title_fontsize=11, frameon=True,
                               labelspacing=0.8, borderpad=0.8)
     fig.add_artist(model_legend)
-    # Legend 2: marker size = dataset fraction. markersize is a diameter in
-    # points while scatter's s is an area in pt^2, hence the sqrt; the 0.8
-    # factor keeps the largest swatch from dominating the legend box.
     size_labels = []
     for f in fractions:
-        n_samples = df.loc[df["train_dataset_fraction"] == f, "train_dataset_size"].iloc[0]
+        n_samples = df_base.loc[df_base["train_dataset_fraction"] == f, "train_dataset_size"].iloc[0]
         size_labels.append(f"D = {f:.2f}  ({n_samples / 1e3:,.0f}k imgs)")
     size_handles = [Line2D([], [], marker="o", color="none", linestyle="",
                            markersize=(frac_to_size(f) ** 0.5) * 0.8,
@@ -742,7 +720,7 @@ def plot_combined_scaling_scatter(df: DataFrame, bg_range: str = "0-100"):
 
 
 
-def plot_crossover_epoch_vs_dataset_fraction(df: DataFrame, crossover_metric: str = "val_loss") -> None:
+def plot_crossover_epoch_vs_dataset_fraction(df: DataFrame, crossover_metric: str = "val_loss", baseline_epochs: int = 300) -> None:
     """Line plot of crossover epoch vs. dataset fraction, one line per model.
 
     For each (model, fg_range) the crossover epoch is averaged across the
@@ -756,20 +734,17 @@ def plot_crossover_epoch_vs_dataset_fraction(df: DataFrame, crossover_metric: st
     if crossover_col not in df.columns:
         raise ValueError(f"Crossover column '{crossover_col}' not found in database. "
                          f"Available columns: {list(df.columns)}")
-    fornet = df[df["train_dataset_name"] == "fornet/all/cos"].copy()
+    df_base = df[df["baseline_epochs"] == baseline_epochs].copy()
+    fornet = df_base[df_base["train_dataset_name"] == "fornet/all/cos"].copy()
     if fornet.empty:
-        raise ValueError("No ForNet runs found in database.")
+        raise ValueError(f"No ForNet runs found in database for baseline_epochs={baseline_epochs}.")
 
     fractions = [0.10, 0.25, 0.50, 1.00]
-    models = sorted(
-        fornet["model_name"].unique(),
-        key=lambda m: _MODEL_SIZE_ORDER.index(m) if m in _MODEL_SIZE_ORDER else len(_MODEL_SIZE_ORDER)
-    )
+    all_models = fornet["model_name"].unique()
+    models = [m for m in _MODEL_SIZE_ORDER if m in all_models]
+    if not models:
+        models = sorted(all_models)
 
-    # For each model x fraction, average the crossover epoch across bg_range
-    # variants that actually crossed (crossover_col > 0); -1 means that
-    # particular bg_range never crossed. A fraction is "never" only if none
-    # of its bg_range variants crossed.
     epochs_by_model = {}
     for model in models:
         model_df = fornet[fornet["model_name"] == model]
@@ -778,7 +753,7 @@ def plot_crossover_epoch_vs_dataset_fraction(df: DataFrame, crossover_metric: st
             frac_df = model_df[model_df["train_dataset_fraction"] == frac]
             valid = frac_df.loc[frac_df[crossover_col] > 0, crossover_col]
             mean = valid.mean() if len(valid) > 0 else np.nan
-            normalized_epoch = mean / frac_df.iloc[0]["total_epochs"] if mean is not np.nan else np.nan
+            normalized_epoch = mean / frac_df.iloc[0]["total_epochs"] if (len(frac_df) > 0 and mean is not np.nan) else np.nan
             values.append(normalized_epoch)
         epochs_by_model[model] = np.array(values, dtype=float)
 
@@ -786,7 +761,7 @@ def plot_crossover_epoch_vs_dataset_fraction(df: DataFrame, crossover_metric: st
     if all_valid.size == 0:
         raise ValueError(f"No valid crossover epochs found for metric '{crossover_metric}'")
     y_max = all_valid.max()
-    y_never = y_max * 1.12  # marker row for "never crossed" points, above all real data
+    y_never = y_max * 1.12
 
     metric_labels = {
         "val_loss": ("Val Loss", "drops below"),
@@ -795,10 +770,9 @@ def plot_crossover_epoch_vs_dataset_fraction(df: DataFrame, crossover_metric: st
     }
     metric_title, direction = metric_labels.get(crossover_metric, (crossover_metric, "crosses"))
 
-    # Publication-friendly, colorblind-safe categorical palette, fixed order per model.
     colors = sns.color_palette("colorblind", n_colors=len(models))
 
-    fig, ax = plt.subplots(figsize=(7, 5.5))
+    fig, ax = plt.subplots(figsize=(7.5, 5.5))
     for i, model in enumerate(models):
         y = epochs_by_model[model]
         valid_mask = ~np.isnan(y)
@@ -823,8 +797,8 @@ def plot_crossover_epoch_vs_dataset_fraction(df: DataFrame, crossover_metric: st
 
     ax.set_ylim(top=y_never * 1.12)
     ax.set_xlabel("Dataset fraction $D$")
-    ax.set_ylabel(f"Crossover epoch (ForNet {direction} ImageNet)")
-    ax.set_title(f"Crossover Speed vs. Dataset Fraction ({metric_title})")
+    ax.set_ylabel(f"Normalized crossover epoch (ForNet {direction} ImageNet)")
+    ax.set_title(f"Crossover Speed vs. Dataset Fraction ({metric_title}, {baseline_epochs}-Epoch Baseline)")
     ax.set_xticks(fractions)
     ax.set_xticklabels([f"{f:.2f}" for f in fractions])
     ax.grid(True, which='major', ls='--', alpha=0.5)
@@ -841,7 +815,7 @@ def plot_crossover_epoch_vs_dataset_fraction(df: DataFrame, crossover_metric: st
 
 
 
-def plot_crossover_vs_model_size(df: DataFrame, crossover_metric: str = "val_loss", normalize: bool = True):
+def plot_crossover_vs_model_size(df: DataFrame, crossover_metric: str = "val_loss", normalize: bool = True, baseline_epochs: int = 300):
     """Line plot of crossover epoch vs model parameter count (log-x),
     one line per dataset fraction. Mirrors the never-crossed handling
     from plot_crossover_epoch_vs_dataset_fraction for consistency.
@@ -855,19 +829,18 @@ def plot_crossover_vs_model_size(df: DataFrame, crossover_metric: str = "val_los
     if "parameter_count" not in df.columns:
         raise ValueError("'parameter_count' column not found in database.")
 
-    fornet = df[df["train_dataset_name"] == "fornet/all/cos"].copy()
+    df_base = df[df["baseline_epochs"] == baseline_epochs].copy()
+    fornet = df_base[df_base["train_dataset_name"] == "fornet/all/cos"].copy()
     if fornet.empty:
-        raise ValueError("No ForNet runs found in database.")
+        raise ValueError(f"No ForNet runs found in database for baseline_epochs={baseline_epochs}.")
 
     fractions = sorted(fornet["train_dataset_fraction"].unique())
-    models = sorted(
-        fornet["model_name"].unique(),
-        key=lambda m: fornet.loc[fornet["model_name"] == m, "parameter_count"].iloc[0]
-    )
+    all_models = fornet["model_name"].unique()
+    models = [m for m in _MODEL_SIZE_ORDER if m in all_models]
+    if not models:
+        models = sorted(all_models, key=lambda m: fornet.loc[fornet["model_name"] == m, "parameter_count"].iloc[0])
     param_count = {m: fornet.loc[fornet["model_name"] == m, "parameter_count"].iloc[0] for m in models}
 
-    # Per (model, fraction): average crossover epoch across bg_range variants
-    # that actually crossed (value > 0); NaN if none of them ever crossed.
     y_by_fraction = {}
     for frac in fractions:
         values = []
@@ -908,7 +881,7 @@ def plot_crossover_vs_model_size(df: DataFrame, crossover_metric: str = "val_los
     ax.set_xlabel("Model parameter count $N$ (log scale)")
     ax.set_ylabel("Normalized crossover epoch" if normalize else "Crossover epoch")
     metric_labels = {"val_loss": "Val Loss", "val_acc1": "Val Top-1 Acc", "val_acc5": "Val Top-5 Acc"}
-    ax.set_title(f"Crossover Speed vs. Model Size ({metric_labels.get(crossover_metric, crossover_metric)})")
+    ax.set_title(f"Crossover Speed vs. Model Size ({metric_labels.get(crossover_metric, crossover_metric)}, {baseline_epochs}-Epoch Baseline)")
     ax.xaxis.set_major_locator(ticker.FixedLocator(sorted(N)))
     ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{x/1e6:.1f}M"))
     ax.xaxis.set_minor_locator(ticker.NullLocator())
@@ -926,11 +899,15 @@ def plot_crossover_vs_model_size(df: DataFrame, crossover_metric: str = "val_los
 
 
 
-def plot_scaling_law(df:DataFrame):
-    datasets = df["train_dataset_name"].unique()
+def plot_scaling_law(df: DataFrame, baseline_epochs: int = 300):
+    df_base = df[df["baseline_epochs"] == baseline_epochs].copy()
+    datasets = df_base["train_dataset_name"].unique()
     if len(datasets) != 1:
         raise ValueError(f"Dataframe must contain data of only one dataset | Found {datasets}")
-    models = df["model_name"].unique()
+    all_models = df_base["model_name"].unique()
+    models = [m for m in _MODEL_SIZE_ORDER if m in all_models]
+    if not models:
+        models = sorted(all_models)
     dataset_name = None
     if datasets[0] == "fornet/all/cos":
         dataset_name = "ForNet"
@@ -938,36 +915,31 @@ def plot_scaling_law(df:DataFrame):
         dataset_name = "ImageNet"
     else:
         raise ValueError(f"Unknown train_dataset_name in database | train_dataset_name: {datasets[0]}")
-    fig, ax = plt.subplots(figsize=(15, 10))
+    fig, ax = plt.subplots(figsize=(12, 8))
     colors = plt.cm.viridis(np.linspace(0, 1, len(models)))
     for i, model in enumerate(models):
-        filtered_df = filter_database(input_dataframe=df, model_name=model)
+        filtered_df = filter_database(input_dataframe=df_base, model_name=model)
         if datasets[0] == "fornet/all/cos":
             filtered_df = filter_database(input_dataframe=filtered_df, bg_range="0-100")
-        assert len(filtered_df) == 4
+        if len(filtered_df) < 2:
+            continue
         filtered_df = filtered_df.sort_values("train_dataset_fraction", ascending=True)
         D = filtered_df["train_dataset_fraction"]
         loss = filtered_df["min_val_loss"]
         line, = ax.loglog(D, loss, 'o-', color=colors[i], markersize=8, label=f"{model} val/loss")
         coeffs, fit = calculate_fit(loss, D)
-        '''
-        # Power‑law fit
-        log_D, log_L = np.log(D), np.log(loss)
-        coeffs = np.polyfit(log_D, log_L, 1)
-        fit = np.exp(coeffs[1]) * D ** coeffs[0]
-        '''
         ax.loglog(D, fit, '--', color=line.get_color(), alpha=0.7,
                   label=f'{model} Fit: $L \\propto D^{{{coeffs[0]:.2f}}}$')
     if datasets[0] == "fornet/all/cos":
-        ax = show_exact_values(ax, filter_database(input_dataframe=df, bg_range="0-100")["min_val_loss"], "y")
-    else: # "fornet/all/1.0"
-        ax = show_exact_values(ax, df["min_val_loss"], "y")
+        ax = show_exact_values(ax, filter_database(input_dataframe=df_base, bg_range="0-100")["min_val_loss"], "y")
+    else:
+        ax = show_exact_values(ax, df_base["min_val_loss"], "y")
     ax = show_exact_values(ax, [0.10, 0.25, 0.50, 1.00], "x")
     ax.grid(True, which='major', ls='--', alpha=0.5)
     ax.set_xlabel('Dataset fraction $D$')
     ax.set_ylabel('Validation loss $L$')
-    ax.set_title(f'{dataset_name} Scaling Law: Loss vs Dataset Size')
-    ax.legend()
+    ax.set_title(f'{dataset_name} Scaling Law: Loss vs Dataset Size ({baseline_epochs}-Epoch Baseline)')
+    ax.legend(fontsize=9, loc='best')
     plt.tight_layout()
     fig.savefig(PDF_OUTPUTS_DIR / f"{dataset_name.lower()}_scaling_law.pdf")
     fig.savefig(IMG_OUTPUT_DIR / f"{dataset_name.lower()}_scaling_law.png")
@@ -1064,7 +1036,7 @@ def plot_crossover_flops_scaling(df: DataFrame, crossover_metric: str = "val_los
         r2 = 1.0 - (ss_res / ss_tot)
         # Plot power-law fit line
         ax.loglog(D, fit, '--', color=line.get_color(), alpha=0.7,
-                  label=rf'Fit: $C_{{\text{{cross}}}} = {a:.2e} \cdot D^{{{b:.2f}}}$ ($R^2 = {r2:.4f}$)')
+                  label=rf'Fit: $C_{{\mathrm{{cross}}}} = {a:.2e} \cdot D^{{{b:.2f}}}$ ($R^2 = {r2:.4f}$)')
         # Configure subplot
         ax.set_title(f'{model}')
         ax.set_xlabel('Training dataset samples $D$')
@@ -1078,7 +1050,7 @@ def plot_crossover_flops_scaling(df: DataFrame, crossover_metric: str = "val_los
             ticker.FuncFormatter(lambda y, _: f'{y:.2e}')
         )
         ax.yaxis.set_minor_locator(ticker.NullLocator())
-    axes[0].set_ylabel('Crossover FLOPs $C_{\\text{cross}}$')
+    axes[0].set_ylabel(r'Crossover FLOPs $C_{\mathrm{cross}}$')
     fig.suptitle(f'Crossover FLOPs Scaling Law ({crossover_metric.replace("_", " ").title()})', fontsize=15, y=0.98)
     plt.tight_layout()
     # Save the plots

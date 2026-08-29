@@ -160,15 +160,20 @@ def plot_pareto_frontier(df: DataFrame) -> None:
     # ════════════════════════════════════════════════════════════════════════
     for model in models:
         color = model_colors[model]
-        sub = imgnet_data[imgnet_data["model_name"] == model].sort_values("train_dataset_fraction")
+        sub = imgnet_data[imgnet_data["model_name"] == model]
         if sub.empty:
             continue
-        x     = sub["compute_eflops"].to_numpy(float)
-        y     = sub["error_rate"].to_numpy(float)
+        # Connect points per baseline epoch budget along increasing compute
+        for baseline_ep, base_sub in sub.groupby("baseline_epochs"):
+            base_sub = base_sub.sort_values("total_flops")
+            x = base_sub["compute_eflops"].to_numpy(float)
+            y = base_sub["error_rate"].to_numpy(float)
+            ax_img.plot(x, y, "-", color=color, alpha=0.35, lw=1.2, zorder=2)
+        x_all = sub["compute_eflops"].to_numpy(float)
+        y_all = sub["error_rate"].to_numpy(float)
         sizes = marker_area(sub["train_dataset_fraction"].to_numpy(float))
-        ax_img.plot(x, y, "-", color=color, alpha=0.30, lw=1.2, zorder=2)
         ax_img.scatter(
-            x, y, s=sizes, marker="o", color=color,
+            x_all, y_all, s=sizes, marker="o", color=color,
             edgecolor="#333333", linewidth=0.6, alpha=0.92, zorder=3,
         )
 
@@ -196,10 +201,10 @@ def plot_pareto_frontier(df: DataFrame) -> None:
 
     # =====================================================================
     # RIGHT SUBPLOT: ForNet
-    # For each (model, fg_range) there are multiple bg_range rows sharing
-    # the same compute budget.
-    #  1. Solid lines:  same bg_range across fg_ranges (scaling trend).
-    #  2. Dotted lines: same fg_range across bg_ranges (iso-compute bracket).
+    # For each (model, baseline_epochs, fg_range) there are multiple bg_range rows
+    # sharing the same compute budget.
+    #  1. Solid lines:  same (baseline_epochs, bg_range) across fg_ranges (scaling trend).
+    #  2. Dotted lines: same (baseline_epochs, fg_range) across bg_ranges (iso-compute bracket).
     #  3. Scatter each point: colour = model, shape = bg_range, size = frac.
     #  4. Pareto frontier over ALL ForNet points (best error per budget).
     # =====================================================================
@@ -209,20 +214,20 @@ def plot_pareto_frontier(df: DataFrame) -> None:
         if model_sub.empty:
             continue
 
-        # 1. Solid lines: same bg_range across fg_ranges
-        for bg_key, bg_sub in model_sub.groupby("bg_key"):
-            bg_sub = bg_sub.sort_values("train_dataset_fraction")
+        # 1. Solid lines: same (baseline_epochs, bg_range) across fg_ranges
+        for (baseline_ep, bg_key), bg_sub in model_sub.groupby(["baseline_epochs", "bg_key"]):
+            bg_sub = bg_sub.sort_values("total_flops")
             ax_fn.plot(
                 bg_sub["compute_eflops"].to_numpy(float),
                 bg_sub["error_rate"].to_numpy(float),
                 "-", color=color, alpha=0.25, lw=0.9, zorder=2,
             )
 
-        # 2. Dotted lines: same fg_range across bg_ranges (iso-compute bracket)
-        for fg_key, fg_sub in model_sub.groupby("fg_range"):
+        # 2. Dotted lines: same (baseline_epochs, fg_range) across bg_ranges (iso-compute bracket)
+        for (baseline_ep, fg_key), fg_sub in model_sub.groupby(["baseline_epochs", "fg_range"]):
             fg_sub_sorted = fg_sub.sort_values(
                 "bg_key",
-                key=lambda s: s.map(lambda x: int(x.split("-")[1]) if x != "none" else 0),
+                key=lambda s: s.map(lambda x: float(x.split("-")[1]) if x != "none" else 0),
             )
             ax_fn.plot(
                 fg_sub_sorted["compute_eflops"].to_numpy(float),
