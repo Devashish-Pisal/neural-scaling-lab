@@ -138,7 +138,8 @@ for ax, (dataset_name, beta) in zip(axes, plot_configs):
     ax.set_xscale("log")
     ax.set_yscale("log")
 
-    ax.set_ylabel("Validation loss")
+    if ax in [axes[0], axes[3]]:
+        ax.set_ylabel("Validation loss")
 
     ax.set_title(
         rf"{dataset_name}, $\beta={beta:.1f}$",
