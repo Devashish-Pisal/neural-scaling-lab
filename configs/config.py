@@ -127,8 +127,20 @@ MAIN_EXPERIMENT_ID_MAPPING = {
                 0.10: ["kfl3hd12"],
             }
         },
-        # ---- PLANNED (Scaling Law Analysis, Table 4.4) - fill in as these complete ----
-        100: {"imagenet_run_ids": {}, "fornet_run_ids": {}},
+        100: {
+            "imagenet_run_ids": {
+                1.00:["4mohggw5"],
+                0.50:["n3qqem0x"],
+                0.25:["cpnguebb"],
+                0.10:["r3whglmv"],
+            },
+            "fornet_run_ids": {
+                1.00:["x7fr6c2s"],
+                0.50:["4mv6c6s3"],
+                0.25:["mxvb107b"],
+                0.10:["v3wir9c9"],
+            }
+        },
     },
     "vit-s/32": {
         300: {
@@ -195,7 +207,20 @@ MAIN_EXPERIMENT_ID_MAPPING = {
                 0.10: ["ppv4p8j9"],
             }
         },
-        100: {"imagenet_run_ids": {}, "fornet_run_ids": {}},
+        100: {
+            "imagenet_run_ids": {
+                1.00:["i9kj2uws"],
+                0.50:["zhntvp28"],
+                0.25:["1w7paazi"],
+                0.10:["qbi5i9ol"],
+            },
+            "fornet_run_ids": {
+                1.00: ["ri85gdz5"],
+                0.50: ["4gh9bpyc"],
+                0.25: ["2qhbbxbk"],
+                0.10: ["285p09ge"],
+            }
+        },
     },
     "vit-b/28": {
         300: {
@@ -256,7 +281,21 @@ MAIN_EXPERIMENT_ID_MAPPING = {
                 0.10: ["6yj73t8h"],
             }
         },
-        200: {"imagenet_run_ids": {}, "fornet_run_ids": {}},
+        200: {
+            "imagenet_run_ids": {
+#                1.00:["i3bkfx2k"], # change ID here
+#                0.50:["dh4e1tui"],
+#                0.25:["bvmqkxc2"],
+#                0.10:["p0t76sn1"],
+            },
+            "fornet_run_ids": {
+                # bg_range="0-100"
+#                1.00: ["fgu11hps"],
+#                0.50: ["3uqpz93d"],
+#                0.25: ["ovso5kd3"],
+#                0.10: ["hqrdwed9"],
+            }
+        },
         100: {"imagenet_run_ids": {}, "fornet_run_ids": {}},
     },
     "vit-l/32": {
