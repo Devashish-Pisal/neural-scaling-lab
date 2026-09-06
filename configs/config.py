@@ -157,8 +157,34 @@ MAIN_EXPERIMENT_ID_MAPPING = {
                 0.10: ["c9qiljuf", "uc1lodox", "6m8uo7ep", "llnetkcv"],
             },
         },
-        200: {"imagenet_run_ids": {}, "fornet_run_ids": {}},
-        100: {"imagenet_run_ids": {}, "fornet_run_ids": {}},
+        200: {
+            "imagenet_run_ids": {
+        #        1.00: [""],
+        #        0.50: [""],
+        #        0.25: [""],
+        #        0.10: [""],
+            },
+            "fornet_run_ids": {
+        #        1.00: [""],
+        #        0.50: [""],
+        #        0.25: [""],
+        #        0.10: [""],
+            }
+        },
+        100: {
+            "imagenet_run_ids": {
+        #        1.00: [""],
+        #        0.50: [""],
+        #        0.25: [""],
+        #        0.10: [""],
+            },
+            "fornet_run_ids": {
+        #        1.00: [""],
+        #        0.50: [""],
+        #        0.25: [""],
+        #        0.10: [""],
+            }
+        },
     },
     "vit-ti/16": {
         300: {
@@ -175,8 +201,34 @@ MAIN_EXPERIMENT_ID_MAPPING = {
                 0.10: ["jxhfqu0o", "4jcnfqct", "mxo04qqe", "66xvvxq5"],
             },
         },
-        200: {"imagenet_run_ids": {}, "fornet_run_ids": {}},
-        100: {"imagenet_run_ids": {}, "fornet_run_ids": {}},
+        200: {
+            "imagenet_run_ids": {
+                1.00: ["oawas7qz"],
+                0.50: ["4nx1iwsc"],
+                0.25: ["2avlhuv2"],
+                0.10: ["xq0v0ijl"],
+            },
+            "fornet_run_ids": {
+                1.00: ["mu3posou"],
+                0.50: ["9vdbxhl6"],
+                0.25: ["8vm4a6bw"],
+                0.10: ["agifnz49"],
+            }
+        },
+        100: {
+            "imagenet_run_ids": {
+                1.00: ["efrr7ilp"],
+                0.50: ["71566g7f"],
+                0.25: ["o2u47ozp"],
+                0.10: ["mx4fqsly"],
+            },
+            "fornet_run_ids": {
+                1.00: ["z34eorvm"],
+                0.50: ["ge27uy0u"],
+                0.25: ["5kzp7t8l"],
+                0.10: ["o1vgpsq2"],
+            }
+        },
     },
     "vit-b/16": {
         300: {
