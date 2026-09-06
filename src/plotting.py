@@ -302,8 +302,28 @@ def plot_fornet_vs_imagenet_delta_gain(df: DataFrame, baseline_epochs: int = 300
 
 
 def plot_model_scaling_comparison(df: DataFrame, baseline_epochs: int = 300):
+    """Model scaling plot redesigned to highlight compute-optimal model selection.
+
+    For each (dataset, fraction) the loss vs. N curve is *non-monotone*: smaller
+    models are compute-optimal at small D (few training images per parameter) and
+    larger models take over only when D is large enough.  Forcing a single power-law
+    fit on these 4 points gives a misleading R².
+
+    Design:
+    - 4 fraction panels (2×2) showing scatter + connecting line for both datasets.
+    - Gold-star marker at the minimum-loss (compute-optimal) model per panel/dataset.
+    - Power-law fit drawn ONLY when R² ≥ 0.85; otherwise a dashed connecting line.
+    - Inset text showing images-per-parameter ratio to motivate the Chinchilla effect.
+    - Bottom-row summary panel: optimal model vs. dataset fraction for each dataset.
+    """
     set_style()
-    df = df[(df["baseline_epochs"] == baseline_epochs) & (df["bg_range"].isin(["0-100", None]))].copy()
+
+    # Dataset size (approximate number of training images at D=1.0)
+    _FORNET_TOTAL_IMAGES = 1_274_557
+
+    # Filter: 300-epoch baseline, ForNet uses bg_range=0-100; ImageNet has NaN bg_range
+    df_fn = df[(df["baseline_epochs"] == baseline_epochs) & (df["bg_range"] == "0-100")].copy()
+    df_in = df[(df["baseline_epochs"] == baseline_epochs) & (df["bg_range"].isna())].copy()
 
     model_params = EXPERIMENT_CONSTANTS["model_parameters"]
     fractions = [0.10, 0.25, 0.50, 1.00]
@@ -312,93 +332,192 @@ def plot_model_scaling_comparison(df: DataFrame, baseline_epochs: int = 300):
         raise ValueError("No patch-16 models found in database for baseline_epochs.")
     param_count = {m: model_params[m.lower()] for m in models}
 
+    # {ds_name: (label, color, marker, bg_df)}
     datasets = {
-        "fornet/all/1.0": ("ImageNet", "#1f77b4", "o"),
-        "fornet/all/cos": ("ForNet", "#d62728", "s"),
+        "fornet/all/1.0": ("ImageNet", "#1f77b4", "o", df_in),
+        "fornet/all/cos": ("ForNet",    "#d62728", "s", df_fn),
     }
 
-    fig, axes = plt.subplots(2, 2, figsize=(14, 11), sharey=True)
-    axes = axes.ravel()
-    y_bounds = []
+    # --- Layout: 3 rows × 2 cols  →  top 4 panels = fractions, bottom = summary ---
+    fig = plt.figure(figsize=(14, 17))
+    gs = fig.add_gridspec(3, 2, hspace=0.42, wspace=0.25,
+                          height_ratios=[1, 1, 0.65])
+    frac_axes = [fig.add_subplot(gs[r, c]) for r in range(2) for c in range(2)]
+    ax_summary = fig.add_subplot(gs[2, :])
 
-    for ax, frac in zip(axes, fractions):
-        frac_rows = []
-        for model in models:
-            for ds_name in datasets:
-                row = df[
-                    (df["model_name"] == model) &
-                    (df["train_dataset_name"] == ds_name) &
-                    (df["train_dataset_fraction"] == frac)
+    # Track compute-optimal model per (dataset, fraction) for summary panel
+    optimal_model_idx = {ds: {} for ds in datasets}   # ds_name → {frac: model_idx}
+    all_y = []
+
+    for ax, frac in zip(frac_axes, fractions):
+        n_images = int(_FORNET_TOTAL_IMAGES * frac)
+
+        for ds_name, (label, color, marker, src_df) in datasets.items():
+            pts = []
+            for model in models:
+                row = src_df[
+                    (src_df["model_name"] == model) &
+                    (src_df["train_dataset_name"] == ds_name) &
+                    (src_df["train_dataset_fraction"] == frac)
                 ]
-                if len(row) >= 1:
-                    loss = row["min_val_loss"].iloc[0]
-                    frac_rows.append({
-                        "model": model,
-                        "N": param_count[model],
-                        "dataset_name": ds_name,
-                        "loss": loss,
-                    })
-        frac_df = pd.DataFrame(frac_rows)
-        if frac_df.empty:
-            continue
-        y_bounds += frac_df["loss"].tolist()
-
-        for dataset_name, (label, color, marker) in datasets.items():
-            sub = frac_df[frac_df["dataset_name"] == dataset_name].sort_values("N")
-            if sub.empty:
+                if not row.empty:
+                    pts.append({"model": model, "N": param_count[model],
+                                "loss": row["min_val_loss"].iloc[0]})
+            if not pts:
                 continue
-            N = sub["N"].to_numpy(float)
-            L = sub["loss"].to_numpy(float)
-            ax.scatter(
-                N, L, s=80, marker=marker, color=color,
-                edgecolor="white", linewidth=0.8, zorder=3, label=label,
-            )
+            sub = pd.DataFrame(pts).sort_values("N")
+            N  = sub["N"].to_numpy(float)
+            L  = sub["loss"].to_numpy(float)
+            all_y.extend(L.tolist())
+
+            # ── power-law fit (log-log linear regression) ──────────────────────
+            fit_label = label
             if len(N) >= 2:
-                coeffs, _ = calculate_fit(L, N)
-                alpha, a = coeffs[0], np.exp(coeffs[1])
+                coeffs = np.polyfit(np.log(N), np.log(L), 1)
+                alpha_v, a_v = coeffs[0], np.exp(coeffs[1])
                 pred = coeffs[0] * np.log(N) + coeffs[1]
-                r2 = 1 - np.sum((np.log(L) - pred) ** 2) / np.sum((np.log(L) - np.mean(np.log(L))) ** 2)
-                n_smooth = np.geomspace(N.min(), N.max(), 100)
-                ax.plot(
-                    n_smooth, a * n_smooth ** alpha, "--", color=color, lw=1.5,
-                    label=rf"{label} Fit: $L={a:.2f}N^{{{alpha:.2f}}}$ ($R^2={r2:.3f}$)"
-                )
+                r2 = 1 - (np.sum((np.log(L) - pred) ** 2) /
+                           np.sum((np.log(L) - np.mean(np.log(L))) ** 2))
+                n_sm = np.geomspace(N.min(), N.max(), 200)
+                if r2 >= 0.85:
+                    ax.plot(n_sm, a_v * n_sm ** alpha_v, "--", color=color, lw=1.6,
+                            alpha=0.85, zorder=2)
+                    fit_label = (rf"{label}: $L\!\propto\!N^{{{alpha_v:.3f}}}$"
+                                 rf" ($R^2\!=\!{r2:.2f}$)")
+                else:
+                    # Connect dots with a faint line to show the non-monotone shape
+                    ax.plot(N, L, "-", color=color, lw=1.4, alpha=0.45, zorder=2)
+                    fit_label = (rf"{label} (non-monotone, $R^2\!=\!{r2:.2f}$)")
 
-        # Annotate model names cleanly above points
+            # ── scatter ────────────────────────────────────────────────────────
+            ax.scatter(N, L, s=70, marker=marker, color=color,
+                       edgecolor="white", linewidth=0.9, zorder=4,
+                       label=fit_label)
+
+            # ── compute-optimal star ───────────────────────────────────────────
+            best_idx = int(np.argmin(L))
+            optimal_model_idx[ds_name][frac] = best_idx
+            ax.scatter(N[best_idx], L[best_idx], s=220, marker="*",
+                       color=color, edgecolor="gold", linewidth=1.5, zorder=5)
+
+        # ── model name annotations (above the highest-loss point at that N) ───
         for model in models:
-            m_sub = frac_df[frac_df["model"] == model]
-            if not m_sub.empty:
-                max_loss = m_sub["loss"].max()
-                short_name = model.split("ViT-")[-1]
+            N_m = param_count[model]
+            losses_here = []
+            for ds_name, (_, _, _, src_df) in datasets.items():
+                row = src_df[(src_df["model_name"] == model) &
+                             (src_df["train_dataset_fraction"] == frac)]
+                if not row.empty:
+                    losses_here.append(row["min_val_loss"].iloc[0])
+            if losses_here:
                 ax.annotate(
-                    short_name, xy=(param_count[model], max_loss),
-                    xytext=(0, 8), textcoords="offset points", ha="center",
-                    fontsize=9, color="black", fontweight="bold", clip_on=False,
+                    model.split("ViT-")[-1],
+                    xy=(N_m, max(losses_here)),
+                    xytext=(0, 9), textcoords="offset points",
+                    ha="center", fontsize=8.5, color="#333333",
+                    fontweight="bold", clip_on=False,
                 )
 
+        # ── images-per-parameter inset ────────────────────────────────────────
+        img_pp = {m: n_images / param_count[m] for m in models}
+        lines = [f"{m.split('ViT-')[-1]}: {img_pp[m]:.1f}" for m in models]
+        ax.text(0.02, 0.97, "img/param:\n" + "\n".join(lines),
+                transform=ax.transAxes, fontsize=7.2, va="top", ha="left",
+                color="#555555",
+                bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="#cccccc",
+                          alpha=0.85))
+
+        # ── axes styling ──────────────────────────────────────────────────────
         ax.set_xscale("log")
         ax.set_yscale("log")
         n_ticks = [param_count[m] for m in models]
-        tick_labels = [f"{param_count[m]/1e6:.1f}M\n({m.split('ViT-')[-1]})" for m in models]
+        tick_labels = [f"{param_count[m]/1e6:.1f}M\n({m.split('ViT-')[-1]})"
+                       for m in models]
         ax.xaxis.set_major_locator(ticker.FixedLocator(n_ticks))
         ax.xaxis.set_major_formatter(ticker.FixedFormatter(tick_labels))
         ax.xaxis.set_minor_locator(ticker.NullLocator())
-        ax.tick_params(axis="x", labelsize=8.5)
-        ax.set_title(f"Dataset fraction $D = {frac:.2f}$", fontsize=12, fontweight="bold")
+        ax.tick_params(axis="x", labelsize=8)
+        ax.set_title(
+            f"$D = {frac:.2f}$  ({n_images:,} images)",
+            fontsize=12, fontweight="bold"
+        )
         ax.set_xlabel("Parameter count $N$")
-        ax.grid(True, which="major", ls="--", alpha=0.4)
-        ax.grid(True, which="minor", ls=":", alpha=0.15)
-        ax.legend(fontsize=8.5, loc="best", framealpha=0.95)
+        ax.grid(True, which="major", ls="--", alpha=0.35)
+        ax.grid(True, which="minor", ls=":", alpha=0.12)
+        ax.legend(fontsize=7.8, loc="upper right", framealpha=0.95,
+                  handlelength=1.6)
 
-    if y_bounds:
-        axes[0].set_ylim(min(y_bounds) * 0.88, max(y_bounds) * 1.25)
-    for ax in axes[::2]:
-        ax.set_ylabel("Validation loss $L$ (min)")
-    fig.suptitle(f"Model Scaling: Validation Loss vs. Parameter Count (Patch 16, {baseline_epochs}-Epoch Baseline)", fontsize=16, fontweight="bold")
-    fig.tight_layout()
-    fig.savefig(PDF_OUTPUTS_DIR / "model_scaling_comparison.pdf")
-    fig.savefig(IMG_OUTPUT_DIR / "model_scaling_comparison.png")
-    plt.show()
+    # Shared y-axis label on left column
+    for ax in frac_axes[::2]:
+        ax.set_ylabel("Min. validation loss $L$")
+
+    # Shared y-limits across all fraction panels
+    if all_y:
+        y_lo, y_hi = min(all_y) * 0.90, max(all_y) * 1.18
+        for ax in frac_axes:
+            ax.set_ylim(y_lo, y_hi)
+
+    # ── Summary panel: compute-optimal model vs. dataset fraction ─────────────
+    model_to_idx = {m: i for i, m in enumerate(models)}
+    idx_to_label = {i: m.split("ViT-")[-1] for i, m in enumerate(models)}
+    offset = {"fornet/all/1.0": -0.06, "fornet/all/cos": +0.06}
+    frac_x = np.array(fractions)
+
+    for ds_name, (label, color, marker, _) in datasets.items():
+        opt_idxs = [optimal_model_idx[ds_name].get(f, np.nan) for f in fractions]
+        valid = [(f, idx) for f, idx in zip(fractions, opt_idxs)
+                 if not (isinstance(idx, float) and np.isnan(idx))]
+        if not valid:
+            continue
+        fs, idxs = zip(*valid)
+        xs = np.array(fs) + offset[ds_name]
+        ys = np.array(idxs)
+        ax_summary.plot(xs, ys, "--", color=color, lw=1.5, alpha=0.6)
+        ax_summary.scatter(xs, ys, s=110, marker=marker, color=color,
+                           edgecolor="white", linewidth=1.0, zorder=4,
+                           label=label)
+        for f, idx in zip(fs, idxs):
+            ax_summary.annotate(
+                idx_to_label[idx],
+                xy=(f + offset[ds_name], idx),
+                xytext=(0, 10), textcoords="offset points",
+                ha="center", fontsize=9, color=color, fontweight="bold",
+            )
+
+    ax_summary.set_xlim(fractions[0] - 0.08, fractions[-1] + 0.08)
+    ax_summary.set_xticks(fractions)
+    ax_summary.set_xticklabels([f"$D={f:.2f}$\n({int(_FORNET_TOTAL_IMAGES*f):,} img)"
+                                 for f in fractions])
+    ax_summary.set_yticks(range(len(models)))
+    ax_summary.set_yticklabels([m.split("ViT-")[-1] for m in models])
+    ax_summary.set_xlabel("Dataset fraction $D$", fontsize=12)
+    ax_summary.set_ylabel("Compute-optimal\nmodel", fontsize=11)
+    ax_summary.set_title(
+        "Compute-Optimal Model vs. Dataset Fraction  "
+        "(★ = minimum loss at 300-epoch budget)",
+        fontsize=12, fontweight="bold"
+    )
+    ax_summary.grid(True, axis="y", ls="--", alpha=0.35)
+    ax_summary.legend(fontsize=10, loc="lower right", framealpha=0.95)
+
+    # ── Star legend note ──────────────────────────────────────────────────────
+    star_handle = Line2D([0], [0], marker="*", color="w", markerfacecolor="gray",
+                         markeredgecolor="gold", markersize=12, label="Compute-optimal point (★)")
+    for ax in frac_axes:
+        handles, labels = ax.get_legend_handles_labels()
+        ax.legend(handles=handles + [star_handle],
+                  labels=labels + ["Compute-optimal (★)"],
+                  fontsize=7.5, loc="upper right", framealpha=0.95)
+
+    fig.suptitle(
+        f"Model Scaling: Validation Loss vs. Parameter Count\n"
+        f"(Patch-16 models, {baseline_epochs}-epoch baseline — "
+        r"$\bigstar$ = compute-optimal at fixed budget)",
+        fontsize=14, fontweight="bold", y=1.01
+    )
+    fig.savefig(PDF_OUTPUTS_DIR / "model_scaling_comparison.pdf", bbox_inches="tight")
+    fig.savefig(IMG_OUTPUT_DIR / "model_scaling_comparison.png", bbox_inches="tight")
+    plt.close(fig)
 
 
 
